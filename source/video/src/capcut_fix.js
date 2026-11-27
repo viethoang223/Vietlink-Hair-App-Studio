@@ -78,7 +78,9 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
     try { content = JSON.parse(await readText(draft, 'draft_content.json')); } catch (e) { say('err', '"' + name + '": file dự án hỏng, hãy xóa dự án này rồi tạo lại.'); continue; }
     /* 3a. media paths must point into this project's materials folder */
     const want = fold + '/materials/', vids = (content.materials && content.materials.videos) || [];
-    const wrong = vids.filter(v => norm(v.path) !== want + norm(v.path).split('/materials/').pop());
+    /* CapCut rewrites paths inside the project to "##_draftpath_placeholder_<id>_##/materials/…" once it opens it: also fine */
+    const placeholder = p => /^##_draftpath_placeholder_[^#]+_##\/materials\//.test(p);
+    const wrong = vids.filter(v => !placeholder(norm(v.path)) && norm(v.path) !== want + norm(v.path).split('/materials/').pop());
     if (wrong.length) {
       if (fix) {
         const fixText = text => { const c = JSON.parse(text); for (const v of (c.materials.videos || [])) { const f = norm(v.path).split('/materials/').pop(); if (f) v.path = want + f; } return JSON.stringify(c); };
