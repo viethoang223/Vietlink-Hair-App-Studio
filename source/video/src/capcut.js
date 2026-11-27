@@ -149,20 +149,21 @@ function buildCapcutDraft(edl, media, opts) {
 
   /* ---- logo and WhatsApp icon as image layers over the scenes (positions from brand.json) ---- */
   const overlay = [], L = BRAND.logo, Q = BRAND.whatsapp;
-  if (media.logo && bodyEnd > bodyStart) {
-    const lh = media.logo.height * L.width / media.logo.width, id = videoMaterial(media.logo.file, media.logo.width, media.logo.height, 0, false, true);
-    const fit = Math.min(W / media.logo.width, H / media.logo.height), sc = L.width / (media.logo.width * fit);
+  /* in the page: the user's logo/WhatsApp settings; in Node tests: brand.json places */
+  const ML = typeof marksLayout === 'function' ? marksLayout() : {logo: {x: L.left, y: L.top, w: L.width, h: 0, opacity: L.opacity}, wa: {x: W - Q.right - Q.size * 1.3 - (opts.waNumber || '').length * Q.size * .56, y: Q.top, size: Q.size, gap: Q.size * .3, w: 0, opacity: Q.opacity}};
+  if (media.logo && ML.logo && bodyEnd > bodyStart) {
+    const lw = ML.logo.w, lh = media.logo.height * lw / media.logo.width, id = videoMaterial(media.logo.file, media.logo.width, media.logo.height, 0, false, true);
+    const fit = Math.min(W / media.logo.width, H / media.logo.height), sc = lw / (media.logo.width * fit);
     const seg = segment('video', id, bodyStart, bodyEnd - bodyStart, {source_timerange: {start: 0, duration: bodyEnd - bodyStart}, speed: 1, volume: 0, extra_material_refs: helpers(1)});
-    seg.clip = {scale: {x: sc, y: sc}, rotation: 0, transform: {x: (L.left + L.width / 2 - W / 2) / (W / 2), y: -(L.top + lh / 2 - H / 2) / (H / 2)}, flip: {vertical: false, horizontal: false}, alpha: L.opacity};
+    seg.clip = {scale: {x: sc, y: sc}, rotation: 0, transform: {x: (ML.logo.x + lw / 2 - W / 2) / (W / 2), y: -(ML.logo.y + lh / 2 - H / 2) / (H / 2)}, flip: {vertical: false, horizontal: false}, alpha: ML.logo.opacity};
     overlay.push(seg);
   }
   const iconTrack = [];
-  if (media.icon && bodyEnd > bodyStart) {
+  if (media.icon && ML.wa && bodyEnd > bodyStart) {
     const id = videoMaterial(media.icon.file, media.icon.width, media.icon.height, 0, false, true);
-    const fit = Math.min(W / media.icon.width, H / media.icon.height), sc = Q.size / (media.icon.width * fit);
-    const textW = (opts.waNumber || '').length * Q.size * .56, left = W - Q.right - Q.size - Q.size * .3 - textW;
+    const fit = Math.min(W / media.icon.width, H / media.icon.height), sc = ML.wa.size / (media.icon.width * fit), left = ML.wa.x;
     const seg = segment('video', id, bodyStart, bodyEnd - bodyStart, {source_timerange: {start: 0, duration: bodyEnd - bodyStart}, speed: 1, volume: 0, extra_material_refs: helpers(1)});
-    seg.clip = {scale: {x: sc, y: sc}, rotation: 0, transform: {x: (left + Q.size / 2 - W / 2) / (W / 2), y: -(Q.top + Q.size / 2 - H / 2) / (H / 2)}, flip: {vertical: false, horizontal: false}, alpha: Q.opacity};
+    seg.clip = {scale: {x: sc, y: sc}, rotation: 0, transform: {x: (left + ML.wa.size / 2 - W / 2) / (W / 2), y: -(ML.wa.y + ML.wa.size / 2 - H / 2) / (H / 2)}, flip: {vertical: false, horizontal: false}, alpha: ML.wa.opacity};
     iconTrack.push(seg);
   }
 
@@ -176,7 +177,7 @@ function buildCapcutDraft(edl, media, opts) {
       font_path: '', font_id: '', font_resource_id: '', font_name: '', font_title: 'none', fonts: [], words: {start_time: [], end_time: [], text: []}, current_words: {start_time: [], end_time: [], text: []},
       border_color: opt.stroke || '', border_width: opt.stroke ? .08 : 0, border_alpha: opt.stroke ? 1 : 0, has_shadow: !!opt.shadow, shadow_color: opt.shadow ? '#140000' : '', shadow_alpha: opt.shadow ? .6 : 0,
       background_color: opt.bg || '', background_alpha: opt.bg ? (opt.bgAlpha || 1) : 1, background_style: opt.bg ? 1 : 0, background_round_radius: opt.round || 0,
-      line_max_width: .82, group_id: '', bold_width: .008});
+      line_max_width: .82, group_id: '', bold_width: .008, text_alpha: opt.alpha || 1, global_alpha: opt.alpha || 1});
     return add('texts', m);
   };
   const textAnim = (inAnim, durUs) => {
@@ -201,17 +202,18 @@ function buildCapcutDraft(edl, media, opts) {
   edl.texts.forEach(tx => {
     if (!tx.text) return;
     const st = bodyStart + US(tx.start * scaleT), en = Math.min(bodyEnd, bodyStart + US(tx.end * scaleT)); if (en - st < 200000) return;
-    const px = (tx.style === 'stack' ? 118 : tx.style === 'pill' || tx.style === 'tag' ? 64 : 84) * (tx.size || 1), acc = ACC[tx.color] || ACC.brand, plate = acc === ACC.dark ? ACC.brand : acc;
+    const px = ({stack: 118, pill: 64, tag: 64, title: 96, account: 50, desc: 50, watermark: 46}[tx.style] || 84) * (tx.size || 1), acc = ACC[tx.color] || ACC.brand, plate = acc === ACC.dark ? ACC.brand : acc;
     const look = {plain: {stroke: '#140000', shadow: true}, outline: {stroke: '#140000'}, stack: {stroke: '#140000'}, box: {stroke: '#140000'}, duo: {stroke: '#140000'},
+      title: {stroke: '#140000', shadow: true, color: '#FFE135'}, account: {stroke: '#140000'}, desc: {shadow: true}, watermark: {alpha: .32},
       bar: {bg: '#140000', bgAlpha: .72}, band: {bg: plate}, pill: {bg: plate, round: .5}, marker: {bg: plate}, tag: {bg: '#140000', bgAlpha: .78, left: true}}[tx.style] || {stroke: '#140000'};
-    const id = textMaterial(tx.text, px, '#FFFFFF', look);
-    const y = tx.pos === 'high' ? .52 : tx.pos === 'mid' ? 0 : -.44, x = look.left ? -.45 : 0;
+    const id = textMaterial(tx.text, px, look.color || '#FFFFFF', look);
+    const y = tx.y != null ? -(tx.y * H - H / 2) / (H / 2) : tx.pos === 'high' ? .52 : tx.pos === 'mid' ? 0 : -.44, x = look.left ? -.45 : 0;
     place(textSeg(id, st, en - st, x, y, textAnim(tx.anim, en - st)));
   });
-  if (opts.waNumber && bodyEnd > bodyStart) {
-    const id = textMaterial(opts.waNumber, Q.size * 1.25, '#FFFFFF', {stroke: '#140000'});
-    const textW = opts.waNumber.length * Q.size * .56, cx = W - Q.right - textW / 2;
-    place(textSeg(id, bodyStart, bodyEnd - bodyStart, (cx - W / 2) / (W / 2), -(Q.top + Q.size / 2 - H / 2) / (H / 2), null));
+  if (opts.waNumber && ML.wa && bodyEnd > bodyStart) {
+    const id = textMaterial(opts.waNumber, ML.wa.size * 1.25, '#FFFFFF', {stroke: '#140000'});
+    const textW = opts.waNumber.length * ML.wa.size * .56, cx = ML.wa.x + ML.wa.size + ML.wa.gap + textW / 2;
+    place(textSeg(id, bodyStart, bodyEnd - bodyStart, (cx - W / 2) / (W / 2), -(ML.wa.y + ML.wa.size / 2 - H / 2) / (H / 2), null));
   }
 
   /* layer order, bottom to top: scenes, logo, icon, filter, effects, texts */

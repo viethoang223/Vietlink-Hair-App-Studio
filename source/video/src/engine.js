@@ -28,11 +28,57 @@ const TRANS_MIN = {cut: 0, fade: 15, dip: 25, wipe: 35, push: 40, slide: 45, iri
 const SEG_FX = {none: 'Không', punch: 'Giật zoom đầu đoạn', flashIn: 'Lóe sáng đầu đoạn', shake: 'Rung máy', freeze: 'Dừng hình cuối đoạn', bw: 'Đen trắng', mirror: 'Lật gương'};
 const FX_MIN = {none: 0, freeze: 30, bw: 35, punch: 45, flashIn: 55, mirror: 60, shake: 70};
 const LOOKS = {none: 'Gốc', warm: 'Ấm', golden: 'Nắng vàng', clean: 'Sáng sạch', bright: 'Trong trẻo', contrast: 'Tương phản', soft: 'Mềm', faded: 'Phim cũ', cinema: 'Điện ảnh', teal: 'Xanh cam', mono: 'Trầm màu'};
-const TEXT_STYLES = {plain: 'Chữ trơn', bar: 'Thanh nền', outline: 'Viền', pill: 'Viên thuốc', marker: 'Đánh dấu', stack: 'Chữ lớn xếp tầng', tag: 'Nhãn bên trái', box: 'Khung viền', band: 'Dải màu thương hiệu', duo: 'Hai màu xen kẽ'};
+const TEXT_STYLES = {title: 'Tiêu đề kiểu tóc (vàng)', account: 'Tên tài khoản', desc: 'Mô tả', watermark: 'Chữ chìm', plain: 'Chữ trơn', bar: 'Thanh nền', outline: 'Viền', pill: 'Viên thuốc', marker: 'Đánh dấu', stack: 'Chữ lớn xếp tầng', tag: 'Nhãn bên trái', box: 'Khung viền', band: 'Dải màu thương hiệu', duo: 'Hai màu xen kẽ'};
 const TEXT_ANIMS = {none: 'Không', fade: 'Hiện dần', rise: 'Trồi lên', slide: 'Trượt từ trái', pop: 'Bật ra', bounce: 'Nảy', type: 'Gõ chữ', words: 'Từng chữ', wipe: 'Quét ngang', spread: 'Giãn chữ'};
 const TEXT_POS = {low: 'Dưới', mid: 'Giữa', high: 'Trên'};
 const INTROS = {dark: 'Logo nền tối', over: 'Logo trên cảnh đầu', wipe: 'Quét màu thương hiệu', stripes: 'Sọc thương hiệu', zoom: 'Logo phóng to dần'};
 const OUTROS = {cta: 'Nút WhatsApp nền tối', split: 'Cảnh cuối + thông tin', red: 'Nền đỏ thương hiệu', stack: 'Chữ lớn + WhatsApp', site: 'Trang web + WhatsApp'};
+
+
+/* ---------- the 9 Vietlink hair styles ----------
+   title: the big yellow line (+ length in inches, e.g. Straight Hair 24"); desc: what the pattern looks like (only
+   visible facts, no claims); caption: the post text. Hashtags requested by the sales team. */
+const HAIR = {
+  straight: {name: 'Straight', title: 'Straight Hair', desc: 'Sleek & silky, straight from root to tip', mood: 'Sleek, Silky & Timelessly Classic'},
+  natural: {name: 'Natural Wave', title: 'Natural Wave', desc: 'Soft, natural S-waves full of movement', mood: 'Soft, Effortless & Full of Movement'},
+  deep: {name: 'Deep Wave', title: 'Deep Wave', desc: 'Deep, defined waves with rich volume', mood: 'Bold, Defined & Voluminous'},
+  wavycurls: {name: 'Wavy Curls', title: 'Wavy Curls', desc: 'Bouncy waves that curl at the ends', mood: 'Bouncy, Playful & Full of Life'},
+  loosecurls: {name: 'Loose Curls', title: 'Loose Curls', desc: 'Soft, loose curls with natural bounce', mood: 'Soft, Romantic & Bouncy'},
+  burmese: {name: 'Burmese Curls', title: 'Burmese Curls', desc: 'Tight, voluminous Burmese curl pattern', mood: 'Tight, Voluminous & Head-Turning'},
+  kinkycurly: {name: 'Kinky Curly', title: 'Kinky Curly', desc: 'Tight curls with a natural afro texture', mood: 'Natural, Textured & Full'},
+  kinkystraight: {name: 'Kinky Straight', title: 'Kinky Straight', desc: 'Straight with a natural blow-out texture', mood: 'Natural, Blown-Out & Easy to Blend'},
+  kinkycoily: {name: 'Kinky Coily', title: 'Kinky Coily', desc: 'Small, springy coils with full texture', mood: 'Springy, Coily & Full of Texture'},
+};
+const HASHTAGS = ['#rawvietnamesehair', '#rawhairvendor', '#singledonorhair', '#rawhairdonor', '#vietlinkhair'];
+const WATERMARK = 'Raw Vietnamese Donor Hair';
+const hairTitle = (key, inches) => { const h = HAIR[key]; return h ? h.title + (inches ? ' ' + inches + '\u201D' : '') : ''; };
+/** Caption for the post: style line, a short description and the hashtags (plus one for the style). */
+function hairCaption(key, inches, account) {
+  const h = HAIR[key], tags = [...HASHTAGS, h ? '#' + h.name.toLowerCase().replace(/[^a-z]/g, '') + 'hair' : '#rawhair'];
+  const head = h ? h.title.toUpperCase() + (inches ? ' ' + inches + '\u201D' : '') + ' \u2013 ' + h.mood + ' \u2728' : 'RAW VIETNAMESE HAIR \u2013 Factory Direct \u2728';
+  const body = h ? h.desc + '. Raw Vietnamese donor hair, straight from our factory.' : 'Raw Vietnamese donor hair, straight from our factory.';
+  return [head, '', body, 'Chat on WhatsApp: ' + BRAND.number + (account ? ' \u00B7 ' + account : ''), '', tags.join(' ')].join('\n');
+}
+
+/* ---------- logo and WhatsApp settings (per device) ----------
+   Default = the places in brand.json. The user can hide either, move it to a corner, resize it, change its opacity
+   and upload their own logo. Saved in this browser; the video and the CapCut project both use marksLayout(). */
+const MARKS_DEFAULT = {logo: {on: true, corner: 'tl', width: BRAND.logo.width, opacity: BRAND.logo.opacity}, wa: {on: true, corner: 'tr', size: BRAND.whatsapp.size, opacity: BRAND.whatsapp.opacity}};
+let MARKS = JSON.parse(JSON.stringify(MARKS_DEFAULT));
+try { const m = JSON.parse(localStorage.getItem('vl_marks') || 'null'); if (m && m.logo && m.wa) MARKS = {logo: {...MARKS.logo, ...m.logo}, wa: {...MARKS.wa, ...m.wa}}; } catch (e) {}
+const saveMarks = () => { try { localStorage.setItem('vl_marks', JSON.stringify(MARKS)); } catch (e) {} };
+const CORNERS = {tl: 'Trên trái', tc: 'Trên giữa', tr: 'Trên phải', bl: 'Dưới trái', bc: 'Dưới giữa', br: 'Dưới phải'};
+/** Pixel boxes of the logo and the WhatsApp line on the 1080x1920 frame. */
+function marksLayout(measure) {
+  const L = MARKS.logo, Q = MARKS.wa, img = typeof ASSET_IMG !== 'undefined' ? ASSET_IMG.logo : null;
+  const lw = L.width, lh = img ? Math.round(img.naturalHeight * lw / img.naturalWidth) : Math.round(lw * .42);
+  const side = BRAND.logo.left, top = BRAND.logo.top, bottom = 300;
+  const place = (corner, w, h) => ({x: corner[1] === 'l' ? side : corner[1] === 'r' ? OUT_W - side - w : (OUT_W - w) / 2, y: corner[0] === 't' ? top : OUT_H - bottom - h});
+  const size = Q.size, gap = Math.round(size * .3), tw = measure ? measure(BRAND.number, size) : BRAND.number.length * size * .56, ww = size + gap + tw;
+  const lo = place(L.corner, lw, lh), wo = place(Q.corner, ww, size);
+  if (L.on && Q.on && L.corner === Q.corner) wo.y = L.corner[0] === 't' ? lo.y + lh + 18 : lo.y - size - 18;
+  return {logo: L.on ? {...lo, w: lw, h: lh, opacity: L.opacity} : null, wa: Q.on ? {...wo, w: ww, size, gap, opacity: Q.opacity} : null};
+}
 
 /* ---------- random numbers that depend only on the seed ---------- */
 function rng(seed) {
@@ -133,14 +179,20 @@ function generate(seed, clips, opts) {
   const styles = k < .2 ? ['plain'] : k < .5 ? ['plain', 'bar', 'pill', 'outline', 'tag', 'box'] : Object.keys(TEXT_STYLES);
   const anims = k < .2 ? ['fade', 'none'] : k < .5 ? ['fade', 'rise', 'wipe', 'slide', 'spread'] : Object.keys(TEXT_ANIMS).filter(a => a !== 'none');
   const texts = [];
-  const len = totalLength(body);
-  if (r.yes(lerp(.75, 1, k))) texts.push({text: head, start: r.n(.3, 1), end: Math.min(len - .2, r.n(3.5, 6)), style: r.pick(styles), anim: r.pick(anims), pos: r.pick(['low', 'low', 'mid', 'high']), size: r.n(.9, 1.15), color: r.pick(['brand', 'orange', 'dark', 'red'])});
-  if (k >= .35 && len > 8) texts.push({text: r.yes(.5) ? sub : r.pick(LINES), start: len * r.n(.45, .6), end: len * r.n(.75, .9), style: r.pick(styles), anim: r.pick(anims), pos: r.pick(['low', 'mid', 'high']), size: r.n(.75, 1), color: r.pick(['brand', 'orange', 'dark', 'red'])});
+  const len = totalLength(body), hair = HAIR[opts.hair], account = (opts.account || '').trim();
+  if (hair) {
+    texts.push({text: hairTitle(opts.hair, opts.inches), start: .2, end: len - .1, style: 'title', anim: k < .2 ? 'fade' : r.pick(['fade', 'pop', 'rise', 'slide', 'spread']), pos: 'low', y: .6, size: 1, color: 'brand'});
+    if (account) texts.push({text: account, start: .35, end: len - .1, style: 'account', anim: 'fade', pos: 'low', y: .655, size: 1, color: 'brand'});
+    if (len > 5) texts.push({text: hair.desc, start: Math.min(len * .3, 3), end: Math.min(len - .5, len * .3 + r.n(3, 4.5)), style: k < .3 ? 'desc' : r.pick(['desc', 'bar', 'pill', 'tag']), anim: r.pick(anims), pos: 'high', y: .27, size: r.n(.95, 1.1), color: r.pick(['brand', 'orange', 'red'])});
+  } else if (account) texts.push({text: account, start: .35, end: len - .1, style: 'account', anim: 'fade', pos: 'low', y: .8, size: 1, color: 'brand'});
+  if (opts.watermark !== false) texts.push({text: WATERMARK, start: 0, end: len, style: 'watermark', anim: 'none', pos: 'high', y: .2, size: 1, color: 'brand'});
+  if (!hair && r.yes(lerp(.75, 1, k))) texts.push({text: head, start: r.n(.3, 1), end: Math.min(len - .2, r.n(3.5, 6)), style: r.pick(styles), anim: r.pick(anims), pos: r.pick(['low', 'low', 'mid', 'high']), size: r.n(.9, 1.15), color: r.pick(['brand', 'orange', 'dark', 'red'])});
+  if (!hair && k >= .35 && len > 8) texts.push({text: r.yes(.5) ? sub : r.pick(LINES), start: len * r.n(.45, .6), end: len * r.n(.75, .9), style: r.pick(styles), anim: r.pick(anims), pos: r.pick(['low', 'mid', 'high']), size: r.n(.75, 1), color: r.pick(['brand', 'orange', 'dark', 'red'])});
   if (k >= .7 && len > 12 && r.yes(.6)) texts.push({text: r.pick(LINES), start: len * .2, end: len * .38, style: r.pick(styles), anim: r.pick(anims), pos: r.pick(['mid', 'high']), size: r.n(.8, 1.05), color: r.pick(['brand', 'orange', 'dark', 'red'])});
   const fx = {vignette: k >= .3 && r.yes(.7), grain: k >= .6 && r.yes(.6), progress: k >= .5 && r.yes(.4), frame: k >= .4 && r.yes(.25), corners: k >= .45 && r.yes(.25), stripe: k >= .35 && r.yes(.3), letterbox: k >= .55 && r.yes(.2), leak: k >= .75 && r.yes(.5)};
   if (fx.frame && fx.corners) fx.corners = false;
   return {
-    seed, intensity: opts.intensity, body, texts, look, lookAmt, fx, audio: !!opts.audio,
+    seed, intensity: opts.intensity, body, texts, look, lookAmt, fx, audio: !!opts.audio, hair: opts.hair || '', inches: opts.inches || '', account,
     intro: opts.intro ? {style: r.pick(Object.keys(INTROS)), dur: lerp(1.6, 1.1, k)} : null,
     outro: opts.outro ? {style: r.pick(Object.keys(OUTROS)), dur: 2.6} : null,
     leakSeed: r.i(0, 1e6),
@@ -246,9 +298,12 @@ function drawFx(x, edl, t, L, frame) {
 }
 const FX_NAMES = {vignette: 'Tối viền', grain: 'Hạt phim', progress: 'Thanh tiến trình', frame: 'Khung viền', corners: 'Góc khung', stripe: 'Sọc thương hiệu', letterbox: 'Viền điện ảnh', leak: 'Vệt sáng'};
 const font = (size, bold) => `${bold ? 700 : 800} ${size}px ${bold ? 'BrandBold' : 'BrandHeavy'}, Arial, sans-serif`;
-function wrap(x, text, size, maxW, maxLines, bold) {
+const SERIF = new Set(['title', 'account', 'watermark']);
+const fontFor = (style, size) => SERIF.has(style) ? `${style === 'title' ? 900 : 700} ${size}px Georgia, 'Times New Roman', serif` : font(size, false);
+const TITLE_YELLOW = '#FFE135';
+function wrap(x, text, size, maxW, maxLines, bold, style) {
   for (let s = size; ; s -= 2) {
-    x.font = font(s, bold); const rows = []; let row = '';
+    x.font = style ? fontFor(style, s) : font(s, bold); const rows = []; let row = '';
     for (const w of String(text).split(/\s+/).filter(Boolean)) { const nx = row ? row + ' ' + w : w; if (x.measureText(nx).width > maxW && row) { rows.push(row); row = w; } else row = nx; }
     if (row) rows.push(row);
     if ((rows.length <= maxLines && rows.every(r => x.measureText(r).width <= maxW)) || s < 24) return {rows, size: s};
@@ -260,9 +315,9 @@ function drawText(x, tx, t) {
   if (t < tx.start || t > tx.end || !tx.text) return;
   const inP = clamp((t - tx.start) / .45, 0, 1), outP = clamp((tx.end - t) / .3, 0, 1), a = Math.min(inP, outP), ea = ease(inP);
   const style = tx.style, left = style === 'tag';
-  const big = style === 'stack' ? 118 : style === 'pill' || style === 'tag' ? 64 : 84, size0 = big * (tx.size || 1);
-  const w = wrap(x, tx.text, size0, left ? OUT_W - 260 : OUT_W - 180, style === 'stack' ? 4 : style === 'pill' ? 1 : 3, false);
-  const lh = w.size * 1.12, blockH = w.rows.length * lh, cy = tx.pos === 'high' ? 420 + blockH / 2 : tx.pos === 'mid' ? OUT_H / 2 : OUT_H * .72;
+  const big = {stack: 118, pill: 64, tag: 64, title: 96, account: 50, desc: 50, watermark: 46}[style] || 84, size0 = big * (tx.size || 1);
+  const w = wrap(x, tx.text, size0, left ? OUT_W - 260 : OUT_W - 160, style === 'stack' ? 4 : style === 'pill' || style === 'account' || style === 'watermark' ? 1 : 3, false, style);
+  const lh = w.size * 1.12, blockH = w.rows.length * lh, cy = tx.y != null ? tx.y * OUT_H : tx.pos === 'high' ? 420 + blockH / 2 : tx.pos === 'mid' ? OUT_H / 2 : OUT_H * .72;
   const acc = ACCENTS[tx.color] || PALETTE.brand, plate = acc === PALETTE.dark ? PALETTE.brand : acc;
   const ax = left ? 110 : OUT_W / 2;
   x.save();
@@ -279,7 +334,8 @@ function drawText(x, tx, t) {
   x.globalAlpha = clamp(alpha, 0, 1);
   x.translate(OUT_W / 2 + dx, cy + dy); x.scale(sc * sx, sc); x.translate(-OUT_W / 2, -cy);
   if (clipW < 1) { x.beginPath(); x.rect(0, 0, OUT_W * clipW, OUT_H); x.clip(); }
-  x.font = font(w.size, false); x.textAlign = left ? 'left' : 'center'; x.textBaseline = 'middle';
+  x.font = fontFor(style, w.size); x.textAlign = left ? 'left' : 'center'; x.textBaseline = 'middle';
+  if (style === 'watermark') x.globalAlpha *= .32;
   const top = cy - blockH / 2, widest = Math.max(...w.rows.map(r => x.measureText(r).width));
   if (style === 'bar') { x.fillStyle = 'rgba(20,0,0,.72)'; x.fillRect(0, top - 26, OUT_W, blockH + 52); x.fillStyle = acc; x.fillRect(0, top - 26, 14, blockH + 52); }
   if (style === 'band') { const g = x.createLinearGradient(0, 0, OUT_W, 0); g.addColorStop(0, PALETTE.red); g.addColorStop(1, PALETTE.orange); x.fillStyle = g; x.fillRect(0, top - 30, OUT_W, blockH + 60); }
@@ -294,29 +350,29 @@ function drawText(x, tx, t) {
     if (style === 'pill') { const pw = tw + w.size * 1.6, ph = w.size * 1.7; x.fillStyle = plate; x.beginPath(); x.roundRect((OUT_W - pw) / 2, y - ph / 2, pw, ph, ph / 2); x.fill(); }
     if (style === 'marker') { x.fillStyle = plate; x.fillRect((OUT_W - tw) / 2 - 22, y - lh * .46, tw + 44, lh * .92); }
     if (!text) return;
-    if (['outline', 'stack', 'plain', 'box', 'duo'].includes(style)) { x.strokeStyle = PALETTE.dark; x.lineWidth = w.size * (style === 'plain' ? .08 : .12); x.lineJoin = 'round'; x.strokeText(text, ax, y); }
-    if (style === 'plain') { x.shadowColor = 'rgba(20,0,0,.5)'; x.shadowBlur = 12; }
+    if (['outline', 'stack', 'plain', 'box', 'duo', 'title', 'account'].includes(style)) { x.strokeStyle = PALETTE.dark; x.lineWidth = w.size * (style === 'plain' ? .08 : style === 'title' ? .1 : style === 'account' ? .14 : .12); x.lineJoin = 'round'; x.strokeText(text, ax, y); }
+    if (style === 'plain' || style === 'desc' || style === 'title') { x.shadowColor = 'rgba(20,0,0,.55)'; x.shadowBlur = style === 'title' ? 18 : 12; x.shadowOffsetY = style === 'title' ? 4 : 0; }
     if (style === 'duo') {
       /* Words alternate white and orange, laid out left to right around the centre. */
       const parts = text.split(' '), space = x.measureText(' ').width, full = x.measureText(text).width; let cx = ax - full / 2;
       x.textAlign = 'left'; parts.forEach((p, j) => { x.fillStyle = j % 2 ? PALETTE.orange : '#FFFFFF'; x.fillText(p, cx, y); cx += x.measureText(p).width + space; }); x.textAlign = 'center';
-    } else { x.fillStyle = '#FFFFFF'; x.fillText(text, ax, y); }
-    x.shadowBlur = 0;
+    } else { x.fillStyle = style === 'title' ? TITLE_YELLOW : '#FFFFFF'; x.fillText(text, ax, y); }
+    x.shadowBlur = 0; x.shadowOffsetY = 0;
   });
   x.restore();
 }
-/** Logo (top left) and the user's WhatsApp number (top right), as locked in brand.json. */
+/** Logo and the user's WhatsApp number, where the user put them (default: brand.json places). */
 function drawMarks(x) {
-  const L = BRAND.logo, Q = BRAND.whatsapp, logo = ASSET_IMG.logo, icon = ASSET_IMG.icon;
-  if (!logo || !icon) return;
-  const lh = Math.round(logo.naturalHeight * L.width / logo.naturalWidth);
-  x.save(); x.globalAlpha = L.opacity; x.shadowColor = BRAND.dark; x.shadowBlur = 5; x.drawImage(logo, L.left, L.top, L.width, lh); x.restore();
-  const size = Q.size, gap = Math.round(size * .3);
-  x.save(); x.globalAlpha = Q.opacity; x.font = font(size, true); x.textBaseline = 'middle'; x.textAlign = 'left';
-  const tw = x.measureText(BRAND.number).width, left = OUT_W - Q.right - size - gap - tw, mid = Q.top + size / 2;
-  x.drawImage(ASSET_IMG.iconGreen, left, Q.top, size, size); x.lineWidth = 4; x.strokeStyle = BRAND.dark; x.lineJoin = 'round';
-  x.strokeText(BRAND.number, left + size + gap, mid); x.fillStyle = '#fff'; x.fillText(BRAND.number, left + size + gap, mid);
-  x.restore();
+  const logo = ASSET_IMG.logo; if (!logo || !ASSET_IMG.iconGreen) return;
+  const M = marksLayout((t, size) => { x.save(); x.font = font(size, true); const w = x.measureText(t).width; x.restore(); return w; });
+  if (M.logo) { x.save(); x.globalAlpha = M.logo.opacity; x.shadowColor = BRAND.dark; x.shadowBlur = 5; x.drawImage(logo, M.logo.x, M.logo.y, M.logo.w, M.logo.h); x.restore(); }
+  if (M.wa) {
+    const q = M.wa, mid = q.y + q.size / 2;
+    x.save(); x.globalAlpha = q.opacity; x.font = font(q.size, true); x.textBaseline = 'middle'; x.textAlign = 'left';
+    x.drawImage(ASSET_IMG.iconGreen, q.x, q.y, q.size, q.size); x.lineWidth = Math.max(3, q.size / 8); x.strokeStyle = BRAND.dark; x.lineJoin = 'round';
+    x.strokeText(BRAND.number, q.x + q.size + q.gap, mid); x.fillStyle = '#fff'; x.fillText(BRAND.number, q.x + q.size + q.gap, mid);
+    x.restore();
+  }
 }
 function drawLogoCenter(x, y, width, alpha) { const logo = ASSET_IMG.logo; if (!logo) return; const h = logo.naturalHeight * width / logo.naturalWidth; x.save(); x.globalAlpha = alpha; x.drawImage(logo, (OUT_W - width) / 2, y - h / 2, width, h); x.restore(); }
 function drawIntro(x, edl, t, firstImg) {

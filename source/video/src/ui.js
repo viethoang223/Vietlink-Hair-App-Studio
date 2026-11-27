@@ -27,6 +27,72 @@ function waField() {
     el('p', {className: 'sub', textContent: 'Dùng chung với phần Tạo ảnh. Để trống thì dùng số chung ' + WA_DEFAULT + '.'}));
 }
 
+
+/* ---------- hair style, account line, watermark (remembered in this browser) ---------- */
+const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const kept = (k, d = '') => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } };
+Object.assign(VS.opts, {hair: kept('vl_hair'), inches: kept('vl_inches'), account: kept('vl_account'), watermark: kept('vl_wm', '1') !== '0'});
+const HAIR_OPTS = {'': 'Không ghi kiểu tóc', ...Object.fromEntries(Object.entries(HAIR).map(([k, h]) => [k, h.name]))};
+/** Fields for hair style, length, account name and watermark. onChange(o) runs after each change. */
+function hairFields(o, onChange) {
+  const inches = el('input', {type: 'text', inputMode: 'numeric', className: 'txt', value: o.inches, maxLength: 3, placeholder: 'vd 24', style: 'max-width:110px'});
+  inches.oninput = () => { o.inches = inches.value.replace(/[^\d]/g, '').slice(0, 3); keep('vl_inches', o.inches); onChange(o); };
+  const acc = el('input', {type: 'text', className: 'txt', value: o.account, maxLength: 40, placeholder: 'vd Jimmy Vietlink Hair'});
+  acc.oninput = () => { o.account = acc.value; keep('vl_account', o.account); onChange(o); };
+  const desc = el('p', {className: 'sub', textContent: HAIR[o.hair] ? 'Mô tả tự thêm: ' + HAIR[o.hair].desc : 'Chọn kiểu tóc để video có tiêu đề vàng (như "Straight Hair 24\u201D") và dòng mô tả đúng kiểu tóc.'});
+  return el('div', {},
+    el('div', {className: 'grid2'},
+      el('div', {className: 'field'}, el('label', {textContent: 'Kiểu tóc trong video'}), select(HAIR_OPTS, o.hair, v => { o.hair = v; keep('vl_hair', v); desc.textContent = HAIR[v] ? 'Mô tả tự thêm: ' + HAIR[v].desc : ''; onChange(o); }, 'Kiểu tóc')),
+      el('div', {className: 'field'}, el('label', {textContent: 'Độ dài (inch, không bắt buộc)'}), inches)),
+    desc,
+    el('div', {className: 'field'}, el('label', {textContent: 'Tên tài khoản (dòng nhỏ dưới tiêu đề)'}), acc,
+      el('p', {className: 'sub', textContent: 'Gõ đúng tên tài khoản bạn đang làm content. Máy nhớ tên gõ lần trước.'})),
+    toggle('Chữ chìm "' + WATERMARK + '"', o.watermark, v => { o.watermark = v; keep('vl_wm', v ? '1' : '0'); onChange(o); }));
+}
+/** Keeps the hair title, account line and watermark of an edit list in step with the fields. */
+function applyHairTexts(e, o) {
+  const L = layout(e), len = L.bodyEnd - L.bodyStart, find = st => e.texts.find(t => t.style === st);
+  const set = (style, text, make) => { const t = find(style); if (!text) { if (t) e.texts.splice(e.texts.indexOf(t), 1); return; } if (t) t.text = text; else e.texts.push(make()); };
+  set('title', hairTitle(o.hair, o.inches), () => ({text: hairTitle(o.hair, o.inches), start: .2, end: len - .1, style: 'title', anim: 'fade', pos: 'low', y: .6, size: 1, color: 'brand'}));
+  set('account', (o.account || '').trim(), () => ({text: o.account.trim(), start: .35, end: len - .1, style: 'account', anim: 'fade', pos: 'low', y: HAIR[o.hair] ? .655 : .8, size: 1, color: 'brand'}));
+  set('watermark', o.watermark ? WATERMARK : '', () => ({text: WATERMARK, start: 0, end: len, style: 'watermark', anim: 'none', pos: 'high', y: .2, size: 1, color: 'brand'}));
+  Object.assign(e, {hair: o.hair, inches: o.inches, account: (o.account || '').trim()});
+}
+/** Logo and WhatsApp: show or hide, corner, size, opacity, own logo. Saved in this browser. */
+function marksBox(onChange) {
+  const M = MARKS, up = el('input', {type: 'file', accept: 'image/png,image/jpeg,image/webp'}), note = el('p', {className: 'sub'});
+  up.onchange = async () => {
+    const f = up.files[0]; if (!f) return;
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(f); });
+    const k = Math.min(1, 800 / img.naturalWidth), c = el('canvas', {width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k)});
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const url = c.toDataURL('image/png'); keep('vl_logo', url);
+    ASSET_IMG.logo = await new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = url; });
+    note.textContent = 'Đã dùng logo của bạn (máy này nhớ).'; onChange(true);
+  };
+  const reset = el('button', {type: 'button', className: 'btn line small', textContent: 'Dùng lại logo Vietlink', onclick: () => { try { localStorage.removeItem('vl_logo'); } catch (e) {} ASSET_IMG.logo = ASSET_IMG.brandLogo; onChange(true); }});
+  const back = el('button', {type: 'button', className: 'btn line small', textContent: 'Về vị trí chuẩn', onclick: () => { MARKS = JSON.parse(JSON.stringify(MARKS_DEFAULT)); saveMarks(); onChange(true); }});
+  const ch = (fn, redraw) => v => { fn(v); saveMarks(); onChange(redraw); };
+  return card('Logo & WhatsApp',
+    el('div', {className: 'grid2'},
+      el('div', {className: 'field'}, toggle('Hiện logo', M.logo.on, ch(v => { M.logo.on = v; }, true)), select(CORNERS, M.logo.corner, ch(v => { M.logo.corner = v; }), 'Vị trí logo')),
+      el('div', {className: 'field'}, toggle('Hiện số WhatsApp', M.wa.on, ch(v => { M.wa.on = v; }, true)), select(CORNERS, M.wa.corner, ch(v => { M.wa.corner = v; }), 'Vị trí WhatsApp'))),
+    range('Cỡ logo', 100, 460, 2, M.logo.width, ch(v => { M.logo.width = v; }), v => v + ' px'),
+    range('Độ đậm logo', 20, 100, 1, Math.round(M.logo.opacity * 100), ch(v => { M.logo.opacity = v / 100; }), v => v + '%'),
+    range('Cỡ số WhatsApp', 20, 64, 1, M.wa.size, ch(v => { M.wa.size = v; }), v => v + ' px'),
+    range('Độ đậm số WhatsApp', 20, 100, 1, Math.round(M.wa.opacity * 100), ch(v => { M.wa.opacity = v / 100; }), v => v + '%'),
+    waField(),
+    el('div', {className: 'field'}, el('label', {textContent: 'Logo riêng (PNG nền trong suốt là đẹp nhất)'}), up, note),
+    el('div', {className: 'bar'}, reset, back));
+}
+/** Post caption for the chosen hair style, with hashtags, ready to copy. */
+function captionBox(e) {
+  const area = el('textarea', {className: 'txt', rows: 7, value: hairCaption(e.hair, e.inches, e.account), style: 'width:100%;font-size:14px'});
+  const cp = el('button', {type: 'button', className: 'btn line small', textContent: '📋 Sao chép caption'});
+  cp.onclick = async () => { try { await navigator.clipboard.writeText(area.value); cp.textContent = '✅ Đã chép'; } catch (x) { area.select(); document.execCommand('copy'); cp.textContent = '✅ Đã chép'; } };
+  return card('Caption gợi ý', el('p', {className: 'sub', textContent: 'Theo kiểu tóc đã chọn, kèm hashtag raw hair. Sửa thoải mái trước khi chép.'}), area, cp);
+}
+
 /* ---------- step 1 ---------- */
 /** Switch for the image AI. Turning it on downloads the model once and re-checks the clips already added. */
 function aiBox(msg) {
@@ -78,6 +144,7 @@ function setup() {
       range('Cường độ', 0, 100, 1, o.intensity, v => { o.intensity = v; }, v => v + ' · ' + intensityName(v)),
       el('p', {className: 'sub', textContent: 'Kéo trái: cảnh dài, cắt thẳng, gần như không hiệu ứng. Kéo phải: nhiều nhát cắt, chuyển cảnh, chữ động, hiệu ứng.'}),
       el('div', {className: 'bar'}, toggle('Có intro (logo mở đầu)', o.intro, v => { o.intro = v; }), toggle('Có outro (WhatsApp cuối video)', o.outro, v => { o.outro = v; }), toggle('Giữ tiếng gốc', o.audio, v => { o.audio = v; }))),
+    card('3. Kiểu tóc & tài khoản', hairFields(o, () => {})),
     el('div', {className: 'bar'}, go));
 }
 
@@ -147,7 +214,10 @@ function edit() {
     H.at = coalesce ? performance.now() : 0; H.redo = []; H.last = now;
   };
   const update = (full = true) => { P.set(e); record(!full); if (full) paint(); };
-  const paint = () => { tlBox.replaceChildren(timelineBar(), timeline()); side.replaceChildren(inspector(), overall(), exporter()); };
+  const hairCard = () => card('Kiểu tóc & tài khoản', hairFields({hair: e.hair || '', inches: e.inches || '', account: e.account || '', watermark: e.texts.some(t => t.style === 'watermark')}, o => {
+    Object.assign(VS.opts, {hair: o.hair, inches: o.inches, account: o.account, watermark: o.watermark}); applyHairTexts(e, o); P.set(e); clearTimeout(hairCard.t); hairCard.t = setTimeout(() => { record(true); tlBox.replaceChildren(timelineBar(), timeline()); }, 400);
+  }));
+  const paint = () => { tlBox.replaceChildren(timelineBar(), timeline()); side.replaceChildren(inspector(), hairCard(), marksBox(full => { P.draw(); if (full) paint(); }), overall(), captionBox(e), exporter()); };
   const bodyAt = t => layout(e).segs.find(s => t >= s.at && t < s.end);
   let note = el('span', {className: 'sub'});
   const say = text => { note.textContent = text; clearTimeout(say.t); say.t = setTimeout(() => { note.textContent = ''; }, 3000); };
@@ -324,7 +394,7 @@ function edit() {
         el('div', {className: 'grid2'},
           el('div', {className: 'field'}, el('label', {textContent: 'Kiểu chữ'}), select(TEXT_STYLES, tx.style, v => { tx.style = v; update(false); }, 'Kiểu chữ')),
           el('div', {className: 'field'}, el('label', {textContent: 'Hiệu ứng chữ'}), select(TEXT_ANIMS, tx.anim, v => { tx.anim = v; update(false); P.seek(L.bodyStart + tx.start); P.play(); }, 'Hiệu ứng chữ')),
-          el('div', {className: 'field'}, el('label', {textContent: 'Vị trí'}), select(TEXT_POS, tx.pos, v => { tx.pos = v; update(false); }, 'Vị trí')),
+          el('div', {className: 'field'}, el('label', {textContent: 'Vị trí'}), select(TEXT_POS, tx.pos, v => { tx.pos = v; delete tx.y; update(false); }, 'Vị trí')),
           el('div', {className: 'field'}, el('label', {textContent: 'Màu nhấn'}), select({brand: 'Đỏ cam', orange: 'Cam', red: 'Đỏ', dark: 'Đen ấm'}, tx.color, v => { tx.color = v; update(false); }, 'Màu nhấn'))),
         range('Hiện từ', 0, Math.max(.1, body).toFixed(1), .1, Math.min(tx.start, body).toFixed(1), v => { tx.start = Math.min(v, tx.end - .5); update(false); }, v => v.toFixed(1) + ' s'),
         range('Đến', .5, Math.max(.6, body).toFixed(1), .1, Math.min(tx.end, body).toFixed(1), v => { tx.end = Math.max(v, tx.start + .5); update(false); }, v => v.toFixed(1) + ' s'),
@@ -358,7 +428,14 @@ function edit() {
       try {
         const blob = await exportMp4(e, VS.clips, (p, m) => { bar.value = p; lab.textContent = ' ' + m + ' ' + Math.round(p * 100) + '%'; }, () => cancel);
         out.replaceChildren(...savePanel(blob, 'vietlink_' + e.seed + '.mp4', Math.round((performance.now() - t0) / 1000)));
-      } catch (err) { out.replaceChildren(el('p', {className: err.message === 'cancelled' ? 'sub' : 'err', textContent: err.message === 'cancelled' ? 'Đã hủy.' : 'Không xuất được: ' + err.message})); }
+      } catch (err) {
+        if (err.message === 'cancelled') out.replaceChildren(el('p', {className: 'sub', textContent: 'Đã hủy.'}));
+        else {
+          const rep = el('button', {type: 'button', className: 'btn line small', textContent: '📋 Sao chép chi tiết lỗi'});
+          rep.onclick = async () => { try { await navigator.clipboard.writeText(await exportReport(err)); rep.textContent = '✅ Đã chép, dán gửi người hỗ trợ'; } catch (x) { rep.textContent = 'Không chép được'; } };
+          out.replaceChildren(el('p', {className: 'err', textContent: 'Không xuất được: ' + err.message}), rep);
+        }
+      }
       if (lock) lock.release().catch(() => {});
       go.disabled = false; stop.hidden = true;
     };

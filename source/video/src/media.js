@@ -8,7 +8,9 @@ async function loadAssets() {
   if (ASSET_IMG.logo) return;
   const load = src => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Không tải được logo')); i.src = src; });
   await Promise.all([document.fonts.load('800 76px BrandHeavy'), document.fonts.load('700 32px BrandBold')]);
-  ASSET_IMG.logo = await load(ASSETS.logo); ASSET_IMG.icon = await load(ASSETS.icon);
+  ASSET_IMG.brandLogo = await load(ASSETS.logo); ASSET_IMG.icon = await load(ASSETS.icon);
+  let custom = null; try { custom = localStorage.getItem('vl_logo'); } catch (e) {}
+  ASSET_IMG.logo = custom ? await load(custom).catch(() => ASSET_IMG.brandLogo) : ASSET_IMG.brandLogo;
   const c = document.createElement('canvas'), s = 96; c.width = c.height = s; const x = c.getContext('2d');
   x.drawImage(ASSET_IMG.icon, 0, 0, s, s); x.globalCompositeOperation = 'source-in'; x.fillStyle = BRAND.whatsappIcon; x.fillRect(0, 0, s, s);
   ASSET_IMG.iconGreen = c;
@@ -129,14 +131,38 @@ async function renderThumb(canvas, edl, clips, t) {
 /* ---------- export ---------- */
 /** Encodes the edit list to an MP4 (H.264 + AAC when sound is kept) and returns a Blob. */
 /* range [from, to] in seconds exports only that part, silent (used for the intro/outro cards sent to CapCut). */
+/* Encoder settings tried in order. Some Macs (VideoToolbox) refuse a constant bitrate or a profile, so the export
+   tries the next one instead of failing. The last one used is remembered for this browser. */
+const VCFGS = [{bitrate: 12e6, bitrateMode: 'constant'}, {bitrate: 12e6, bitrateMode: 'variable'}, {bitrate: 10e6}, {bitrate: 6e6}, {quality: 'medium'}];
+const EXPORT_LOG = [];
 async function exportMp4(edl, clips, onProgress, isCancelled, range) {
+  let start = 0; try { start = Math.max(0, VCFGS.findIndex(c => JSON.stringify(c) === localStorage.getItem('vl_vcfg'))); } catch (e) {}
+  const order = [...VCFGS.slice(start), ...VCFGS.slice(0, start)], errors = [];
+  for (const cfg of order) {
+    try {
+      const blob = await exportMp4Once(edl, clips, onProgress, isCancelled, range, cfg);
+      try { localStorage.setItem('vl_vcfg', JSON.stringify(cfg)); } catch (e) {}
+      if (errors.length) EXPORT_LOG.push('Dùng được cấu hình ' + JSON.stringify(cfg) + ' sau khi thử: ' + errors.join(' | '));
+      return blob;
+    } catch (e) {
+      if (e.message === 'cancelled') throw e;
+      errors.push(JSON.stringify(cfg) + ' → ' + (e && e.message || e));
+      onProgress(0, 'Máy này không nhận một cấu hình mã hóa, đang thử cách khác...');
+    }
+  }
+  const err = new Error('Máy này không mã hóa được video H.264 bằng trình duyệt. Hãy thử Chrome bản mới, hoặc dùng nút Mở trong CapCut để xuất từ CapCut.');
+  err.details = errors; EXPORT_LOG.push(...errors); throw err;
+}
+async function exportMp4Once(edl, clips, onProgress, isCancelled, range, cfg) {
   await loadMB();
   const L = layout(edl), N = Math.ceil((range ? range[1] : L.total) * FPS), N0 = range ? Math.floor(range[0] * FPS) : 0, canvas = document.createElement('canvas');
   canvas.width = OUT_W; canvas.height = OUT_H;
   const x = canvas.getContext('2d', {alpha: false});
   const output = new MB.Output({format: new MB.Mp4OutputFormat({fastStart: 'in-memory'}), target: new MB.BufferTarget()});
   /* 12 Mbps cap: sharp at 1080x1920 for Reels/TikTok, and noise effects (film grain) cannot balloon the file. */
-  const vsrc = new MB.CanvasSource(canvas, {codec: 'avc', bitrate: 12e6, bitrateMode: 'constant', keyFrameInterval: 2});
+  const vcfg = {codec: 'avc', keyFrameInterval: 2};
+  if (cfg.quality) vcfg.quality = cfg.quality === 'medium' ? MB.QUALITY_MEDIUM : MB.QUALITY_HIGH; else { vcfg.bitrate = cfg.bitrate; if (cfg.bitrateMode) vcfg.bitrateMode = cfg.bitrateMode; }
+  const vsrc = new MB.CanvasSource(canvas, vcfg);
   output.addVideoTrack(vsrc, {frameRate: FPS});
   const clipOf = id => clips.find(c => c.id === id);
   const withSound = !range && edl.audio && L.segs.some(s => s.speed === 1 && clipOf(s.clip).audioTrack) && await MB.canEncodeAudio('aac');
@@ -258,7 +284,7 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
     media.clips[c.id] = {file, width: c.width, height: c.height, duration: c.duration, hasAudio: !!c.audioTrack};
     sources[file] = {name: c.name, size: c.file.size};
   }
-  await writeFile(draft, 'materials/logo.png', await (await fetch(ASSETS.logo)).blob());
+  await writeFile(draft, 'materials/logo.png', await (await fetch(ASSET_IMG.logo.src)).blob());
   media.logo = {file: 'logo.png', width: ASSET_IMG.logo.naturalWidth, height: ASSET_IMG.logo.naturalHeight};
   await writeFile(draft, 'materials/whatsapp.png', await new Promise(ok => ASSET_IMG.iconGreen.toBlob(ok, 'image/png')));
   media.icon = {file: 'whatsapp.png', width: ASSET_IMG.iconGreen.width, height: ASSET_IMG.iconGreen.height};
@@ -275,4 +301,18 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   await writeFile(dir, 'root_meta_info.json', JSON.stringify(root));
   onProgress(1, 'Xong');
   return folder;
+}
+
+/** Text for support when an export fails: browser, what its encoders accept, and each attempt. */
+async function exportReport(err) {
+  const lines = ['Báo lỗi xuất video Vietlink', new Date().toLocaleString('vi-VN'), navigator.userAgent, 'Lỗi: ' + (err && err.message)];
+  for (const d of (err && err.details) || []) lines.push('  ' + d);
+  const test = async (codec, extra = {}) => { try { return (await VideoEncoder.isConfigSupported({codec, width: 1080, height: 1920, framerate: 30, bitrate: 8e6, ...extra})).supported; } catch (e) { return 'lỗi'; } };
+  if (typeof VideoEncoder === 'function') {
+    lines.push('H.264 high: ' + await test('avc1.640028'), 'H.264 main: ' + await test('avc1.4d0028'), 'H.264 baseline: ' + await test('avc1.42e028'),
+      'CBR: ' + await test('avc1.640028', {bitrateMode: 'constant'}), 'VBR: ' + await test('avc1.640028', {bitrateMode: 'variable'}));
+  } else lines.push('Không có VideoEncoder');
+  try { lines.push('AAC: ' + (await AudioEncoder.isConfigSupported({codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000})).supported); } catch (e) { lines.push('AAC: không'); }
+  lines.push(...EXPORT_LOG.slice(-10));
+  return lines.join('\n');
 }
