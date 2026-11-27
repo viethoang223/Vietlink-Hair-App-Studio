@@ -228,6 +228,19 @@ async function writeFile(dir, rel, data) {
   if (data instanceof Blob) await data.stream().pipeTo(w); else { await w.write(data); await w.close(); }
 }
 /** Writes the edit list as a new CapCut project. Returns the project name. */
+/* The folder's real path on disk. root_meta_info.json's root_path can be stale (CapCut keeps the old one after the user
+   moves "Save to" in Settings), so it is taken from a project CapCut made that sits in the chosen folder. */
+async function realRootPath(dir, root) {
+  const list = [...(root.all_draft_store || [])].sort((a, b) => (b.tm_draft_modified || 0) - (a.tm_draft_modified || 0));
+  for (const e of list) {
+    const p = String(e.draft_fold_path || '').replace(/\\/g, '/'), i = p.lastIndexOf('/');
+    if (i < 1 || /^Vietlink /.test(p.slice(i + 1))) continue;
+    try { await dir.getDirectoryHandle(p.slice(i + 1)); return p.slice(0, i); } catch (x) {}
+  }
+  const rp = String(root.root_path || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (rp && rp.split('/').pop() === dir.name) return rp;
+  throw new Error('Không xác định được đường dẫn thư mục CapCut. Hãy mở CapCut, tạo một dự án trống (để CapCut ghi danh sách ở chỗ lưu mới), tắt CapCut rồi bấm lại.');
+}
 async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const dir = await capcutFolder(forcePick);
   const rootFile = await (await dir.getFileHandle('root_meta_info.json')).getFile(), rootText = await rootFile.text(), root = JSON.parse(rootText);
@@ -235,6 +248,7 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const base = 'Vietlink ' + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) + ' ' + pad(stamp.getHours()) + pad(stamp.getMinutes());
   let folder = base;
   for (let k = 2; ; k++) { try { await dir.getDirectoryHandle(folder); folder = base + ' (' + k + ')'; } catch (e) { break; } }
+  const rootPath = await realRootPath(dir, root);
   const draft = await dir.getDirectoryHandle(folder, {create: true});
   const media = {clips: {}, logo: null, icon: null, intro: null, outro: null}, used = [...new Set(edl.body.map(s => s.clip))];
   for (let i = 0; i < used.length; i++) {
@@ -251,7 +265,7 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   if (edl.intro) { onProgress((used.length + 1) / (used.length + 3), 'Đang dựng intro...'); await writeFile(draft, 'materials/intro.mp4', await exportMp4(edl, clips, () => {}, () => false, [0, L.introEnd])); media.intro = {file: 'intro.mp4', duration: L.introEnd}; }
   if (edl.outro) { onProgress((used.length + 2) / (used.length + 3), 'Đang dựng outro...'); await writeFile(draft, 'materials/outro.mp4', await exportMp4(edl, clips, () => {}, () => false, [L.bodyEnd, L.total])); media.outro = {file: 'outro.mp4', duration: L.total - L.bodyEnd}; }
   const mac = /Mac/i.test(navigator.platform || navigator.userAgent);
-  const out = buildCapcutDraft(edl, media, {rootPath: root.root_path, folder, os: mac ? 'mac' : 'windows', waNumber: BRAND.number});
+  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: mac ? 'mac' : 'windows', waNumber: BRAND.number});
   for (const [rel, text] of Object.entries(out.files)) await writeFile(draft, rel, text);
   await writeFile(dir, 'root_meta_info.json.bak-vietlink', rootText);
   root.all_draft_store = [out.entry, ...(root.all_draft_store || [])]; root.draft_ids = (root.draft_ids || 0) + 1;
