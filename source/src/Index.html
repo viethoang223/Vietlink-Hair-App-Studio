@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<base target="_blank">
+<meta charset="utf-8">
+/*__STYLE__*/
+<style>
+body { padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+header nav { position:static; display:flex; gap:14px; padding:0; background:none; border:0; box-shadow:none; height:auto; width:auto; }
+header nav a { color:#FB923B; font-weight:700; font-size:15px; text-decoration:none; }
+header nav a[aria-current] { color:#fff; }
+</style>
+</head>
+<body>
+<header><h1>Vietlink</h1><nav><a href="./" target="_self" aria-current="page">Tạo ảnh</a><a href="video/" target="_self">Tạo video</a></nav></header>
+<main id="view" tabindex="-1"></main>
+<script>
+/*__ASSETS__*/
+const $ = s => document.querySelector(s), view = $('#view');
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+/*__GEN__*/
+/*__PHOTO__*/
+photos();
+</script>
+</body>
+</html>

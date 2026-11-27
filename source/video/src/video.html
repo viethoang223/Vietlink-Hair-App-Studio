@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vietlink · Tạo video</title>
+/*__STYLE__*/
+<style>
+body { padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+header nav { position:static; display:flex; gap:14px; padding:0; background:none; border:0; box-shadow:none; height:auto; width:auto; }
+header nav a { color:#FB923B; font-weight:700; font-size:15px; text-decoration:none; }
+header nav a[aria-current] { color:#fff; }
+main { max-width:1180px; }
+.card h3 { margin:0 0 10px; font-size:17px; }
+.clip { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
+.tog { display:inline-flex; gap:6px; align-items:center; margin-right:14px; font-size:15px; }
+.player { display:flex; flex-direction:column; gap:8px; align-items:center; }
+.stage { width:100%; max-width:360px; aspect-ratio:9/16; background:#000; border-radius:12px; cursor:pointer; }
+.scrub { flex:1; min-width:120px; }
+.pickwrap { display:grid; grid-template-columns:minmax(260px,380px) 1fr; gap:18px; align-items:start; }
+.variants { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:12px; }
+.variant { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+.variant canvas { width:100%; aspect-ratio:9/16; border-radius:10px; cursor:pointer; border:3px solid transparent; background:#140000; }
+.variant.on canvas { border-color:var(--brand); }
+.btn.small { min-height:34px; padding:4px 12px; font-size:14px; }
+.editwrap { display:grid; grid-template-columns:minmax(260px,380px) 1fr; gap:18px; align-items:start; }
+.stickystage { position:sticky; top:64px; }
+.seg { border-top:1px solid var(--line); padding:12px 0; }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px 14px; }
+.result { width:100%; max-width:300px; border-radius:10px; display:block; margin:8px 0; }
+progress { width:100%; max-width:420px; height:14px; }
+.tlbox { margin-top:16px; }
+.keys { font-size:12px; margin:4px 0 8px; }
+.tl { overflow-x:auto; background:#fff; border:1px solid var(--line); border-radius:12px; padding:6px 0 10px; -webkit-overflow-scrolling:touch; }
+.tlin { position:relative; min-height:200px; }
+.tlruler { position:relative; height:22px; cursor:pointer; border-bottom:1px solid var(--line); }
+.tlruler span { position:absolute; top:3px; font-size:11px; color:var(--mute); transform:translateX(-50%); }
+.tlname { font-size:11px; color:var(--mute); padding:4px 8px 2px; }
+.tlrow { position:relative; height:100px; cursor:pointer; }
+.tlrow.texts { height:40px; }
+.tlb { position:absolute; top:2px; bottom:2px; border-radius:8px; overflow:hidden; display:flex; align-items:center; font-size:12px; font-weight:700; color:#fff; box-sizing:border-box; border:2px solid transparent; user-select:none; touch-action:none; }
+.tlb.on { border-color:#FB923B; box-shadow:0 0 0 2px #140000 inset; }
+.tlb.seg { background:#5a3a30; } .tlb.seg.tC { background:#7b2d1c; } .tlb.seg.tB { background:#3d4a5c; } .tlb.seg.tA { background:#2f5a46; } .tlb.seg.tD { background:#5c4a2a; }
+.tlb.card { background:#140000; justify-content:center; }
+.tlb.txt { background:#F04828; padding:0 14px; white-space:nowrap; cursor:grab; }
+.tllab { display:flex; align-items:center; gap:6px; padding-left:4px; white-space:nowrap; }
+.tthumb { width:40px; height:72px; border-radius:4px; background:#000; flex:none; }
+.tlh { position:absolute; top:0; bottom:0; right:0; width:14px; cursor:ew-resize; background:rgba(255,255,255,.35); touch-action:none; z-index:3; }
+.tlb.on { z-index:2; }
+.tlh.left { left:0; right:auto; }
+.tlplay { position:absolute; top:0; bottom:0; width:2px; background:#EB1C24; pointer-events:none; }
+.tlplay::before { content:''; position:absolute; top:0; left:-5px; border:6px solid transparent; border-top-color:#EB1C24; }
+@media (pointer:coarse) { .tlh { width:26px; } .tlrow { height:110px; } .tlrow.texts { height:52px; } }
+@media (max-width:720px) { .pickwrap, .editwrap { grid-template-columns:1fr; } .stickystage { position:static; } }
+</style>
+</head>
+<body>
+<header><h1>Vietlink</h1><nav><a href="../" target="_self">Tạo ảnh</a><a href="./" target="_self" aria-current="page">Tạo video</a></nav></header>
+<main id="view" tabindex="-1"><p>Đang tải...</p></main>
+<script>
+/*__ASSETS__*/
+/*__ENGINE__*/
+/*__CAPCUT__*/
+/*__MEDIA__*/
+/*__UI__*/
+</script>
+</body>
+</html>
