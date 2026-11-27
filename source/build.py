@@ -48,7 +48,7 @@ def main():
     vsrc = lambda n: (ROOT / "video" / "src" / n).read_text(encoding="utf-8")
     vhtml = vsrc("video.html")
     vparts = {"/*__STYLE__*/": parts["/*__STYLE__*/"], "/*__ASSETS__*/": parts["/*__ASSETS__*/"],
-              "/*__ENGINE__*/": vsrc("engine.js").replace("/*__CLASSIFIER__*/", "const CLASSIFIER = " + vsrc("classifier.json") + ";"), "/*__CAPCUT__*/": "const CAPCUT_T = " + vsrc("capcut_templates.json") + ";\n" + vsrc("capcut.js"), "/*__MEDIA__*/": vsrc("media.js"), "/*__UI__*/": vsrc("ui.js")}
+              "/*__ENGINE__*/": vsrc("engine.js").replace("/*__CLASSIFIER__*/", "const CLASSIFIER = " + vsrc("classifier.json") + ";"), "/*__CAPCUT__*/": "const CAPCUT_T = " + vsrc("capcut_templates.json") + ";\n" + vsrc("capcut.js"), "/*__MEDIA__*/": vsrc("media.js") + "\n" + vsrc("capcut_fix.js"), "/*__UI__*/": vsrc("ui.js")}
     for marker, text in vparts.items():
         assert vhtml.count(marker) == 1, marker
         vhtml = vhtml.replace(marker, text)

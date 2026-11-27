@@ -373,13 +373,29 @@ function edit() {
         ccOut.replaceChildren(el('p', {}, '✅ Đã tạo dự án ', b, ' trong CapCut. Mở CapCut (nếu đang mở thì tắt hẳn rồi mở lại): dự án nằm đầu danh sách, mọi lớp tách rời để chỉnh tiếp.'),
           el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại thư mục CapCut', onclick: () => runCapcut(true)}));
       } catch (err) {
-        if (err.name === 'AbortError') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Chưa chọn được thư mục. Nếu Chrome báo thư mục chứa tệp hệ thống: Chrome không cho trang web mở thư mục trong AppData, nơi CapCut lưu dự án mặc định.'}), el('p', {textContent: 'Cách xử lý (làm một lần): tạo thư mục thường, ví dụ D:\\CapCut Drafts → mở CapCut, vào Cài đặt → Global settings → Draft location (Vị trí bản nháp), chọn thư mục đó → tắt CapCut, mở lại một lần rồi tắt → bấm lại Mở trong CapCut và chọn thư mục mới.'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}));
-        else if (err.message === 'wrongdir') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Thư mục "' + err.dirName + '" không phải thư mục dự án của CapCut. Hãy chọn đúng thư mục com.lveditor.draft (xem hướng dẫn ở trên).'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}));
-        else ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Không tạo được dự án CapCut: ' + err.message}));
+        if (err.name === 'AbortError') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Chưa chọn được thư mục. Nếu Chrome báo thư mục chứa tệp hệ thống: Chrome không cho trang web mở thư mục trong AppData, nơi CapCut lưu dự án mặc định.'}), el('p', {textContent: 'Cách xử lý (làm một lần): tạo thư mục thường, ví dụ D:\\CapCut Drafts → mở CapCut, vào Cài đặt → Global settings → Draft location (Vị trí bản nháp), chọn thư mục đó → tắt CapCut, mở lại một lần rồi tắt → bấm lại Mở trong CapCut và chọn thư mục mới.'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}), fixBtn());
+        else if (err.message === 'wrongdir') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Thư mục "' + err.dirName + '" không phải thư mục dự án của CapCut. Hãy chọn đúng thư mục "Save to" trong CapCut → Settings → Draft (xem hướng dẫn ở trên).'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}), fixBtn());
+        else ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Không tạo được dự án CapCut: ' + err.message}), fixBtn());
       }
       cc.disabled = false;
     };
     cc.onclick = () => runCapcut(false);
+    /* Check and fix: looks through the CapCut folder and repairs what it can (see capcut_fix.js). */
+    const icon = {ok: '✅', warn: '⚠️', err: '❌', fixed: '🔧'};
+    const runCheck = async fix => {
+      P.pause(); ccOut.replaceChildren(el('p', {className: 'sub', textContent: fix ? 'Đang kiểm tra và sửa...' : 'Đang kiểm tra...'}));
+      let list;
+      try { list = await checkCapcut(await savedCapcutDir(), {fix, clips: VS.clips, confirmDelete: t => window.confirm(t)}); }
+      catch (err) { list = [{level: 'err', text: 'Lỗi khi kiểm tra: ' + err.message}]; }
+      const copy = el('button', {type: 'button', className: 'btn line small', textContent: '📋 Sao chép báo cáo'});
+      copy.onclick = async () => { try { await navigator.clipboard.writeText(checkReport(list)); copy.textContent = '✅ Đã chép, dán gửi người hỗ trợ'; } catch (x) { copy.textContent = 'Không chép được'; } };
+      const canFix = !fix && list.some(r => r.fixable);
+      ccOut.replaceChildren(el('ul', {className: 'checks'}, ...list.map(r => el('li', {className: r.level}, icon[r.level] + ' ' + r.text))),
+        el('div', {className: 'bar'}, canFix ? el('button', {type: 'button', className: 'btn', textContent: '🔧 Tự sửa các lỗi trên', onclick: () => runCheck(true)}) : null,
+          el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại thư mục', onclick: () => runCapcut(true)}), copy));
+    };
+    const fixBtn = () => el('button', {type: 'button', className: 'btn small', textContent: '🔧 Tự sửa', onclick: () => runCheck(true)});
+    const checkBtn = el('button', {type: 'button', className: 'btn line', textContent: '🩺 Kiểm tra', disabled: !canCapcut(), onclick: () => runCheck(false)});
     const ccHelp = canCapcut()
       ? el('details', {className: 'sub'}, el('summary', {textContent: 'Lần đầu: chọn thư mục dự án của CapCut'}),
           el('p', {textContent: 'Tắt CapCut trước khi bấm, rồi chọn thư mục dự án của CapCut (thư mục có file root_meta_info.json). Chrome không cho mở thư mục trong AppData, nơi CapCut lưu mặc định, nên lần đầu hãy đổi chỗ lưu: tạo thư mục thường, ví dụ D:\\CapCut Drafts → mở CapCut, vào Cài đặt → Global settings → Draft location (Vị trí bản nháp), chọn thư mục đó → tắt CapCut, mở lại một lần rồi tắt → bấm lại Mở trong CapCut và chọn thư mục mới.'}),
@@ -389,7 +405,7 @@ function edit() {
       : el('p', {className: 'sub', textContent: 'Mở trong CapCut cần Chrome hoặc Edge (Safari chưa cho trang web ghi vào thư mục trên máy).'});
     if (!canCapcut()) cc.disabled = true;
     return el('div', {}, card('Xuất video', el('p', {className: 'sub', textContent: 'MP4 1080×1920, 30 hình/giây, đúng chuẩn Reels và TikTok. Giữ trang này mở trong lúc xuất.'}), el('div', {className: 'bar'}, go, stop), out),
-      card('Chỉnh tiếp trong CapCut', el('p', {className: 'sub', textContent: 'Tạo một dự án CapCut từ bản này: từng đoạn cảnh, chữ, logo, số WhatsApp, chuyển cảnh, hiệu ứng và bộ lọc là lớp riêng để bạn tự chỉnh.'}), el('div', {className: 'bar'}, cc), ccHelp, ccOut));
+      card('Chỉnh tiếp trong CapCut', el('p', {className: 'sub', textContent: 'Tạo một dự án CapCut từ bản này: từng đoạn cảnh, chữ, logo, số WhatsApp, chuyển cảnh, hiệu ứng và bộ lọc là lớp riêng để bạn tự chỉnh.'}), el('div', {className: 'bar'}, cc, checkBtn), ccHelp, ccOut));
   };
 
   view.replaceChildren(el('div', {className: 'bar'}, el('button', {type: 'button', className: 'btn line', textContent: '← Chọn bản khác', onclick: () => { VS.sel = null; pick(); }})),

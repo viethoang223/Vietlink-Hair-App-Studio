@@ -71,3 +71,16 @@ look, overlays, intro/outro style) → Export MP4 (H.264 1080×1920 30 fps, AAC 
 - Tested 27/11 on the live page with clips generated in the browser (H.264 with rotation, 60 and 30 fps, with and
   without sound): detection, 4 versions, preview, editor, export of a 21 s video in 11 s. Not yet tested with a real
   1080p HEVC iPhone clip in the page: this machine's browser reports HEVC decode support, but speed is unmeasured.
+
+### Open in CapCut, check and fix (27/11)
+
+- "🎬 Mở trong CapCut" writes a CapCut project (capcut.js) into the folder set in CapCut → Settings → Draft → Save to.
+  Chrome blocks folders under AppData (CapCut's default), so that setting must point to a normal folder.
+  After moving it, CapCut keeps the old root_path in root_meta_info.json; realRootPath() reads the real one from a
+  CapCut-made project in the chosen folder. Each project also gets vietlink.json (original clip names and sizes).
+- "🩺 Kiểm tra" / "🔧 Tự sửa" (video/src/capcut_fix.js): checks the folder and repairs Vietlink projects only:
+  wrong media paths, project missing from CapCut's list, list entries without a folder, half-written projects
+  (deleted after a confirm), missing clips (copied back from clips still open in the page), missing logo/icon
+  (rewritten), broken list (restored from root_meta_info.json.bak-vietlink*). It backs up the list before saving.
+  "📋 Sao chép báo cáo" copies the findings for support. Test: node test/test_capcut_fix.js "<Save to folder>"
+  (works on a broken copy in the temp folder).

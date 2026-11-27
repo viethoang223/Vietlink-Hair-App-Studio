@@ -215,7 +215,7 @@ async function capcutFolder(forcePick) {
     if (perm !== 'granted') perm = await dir.requestPermission({mode: 'readwrite'});
     if (perm !== 'granted') dir = null;
   }
-  if (!dir) dir = await window.showDirectoryPicker({id: 'capcut-drafts', mode: 'readwrite', startIn: 'documents'});
+  if (!dir) { dir = await window.showDirectoryPicker({id: 'capcut-drafts', mode: 'readwrite', startIn: 'documents'}); await idb('readwrite', st => st.put(dir, 'capcutDir')).catch(() => {}); }
   try { await dir.getFileHandle('root_meta_info.json'); }
   catch (e) { const err = new Error('wrongdir'); err.dirName = dir.name; throw err; }
   await idb('readwrite', st => st.put(dir, 'capcutDir')).catch(() => {});
@@ -250,12 +250,13 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   for (let k = 2; ; k++) { try { await dir.getDirectoryHandle(folder); folder = base + ' (' + k + ')'; } catch (e) { break; } }
   const rootPath = await realRootPath(dir, root);
   const draft = await dir.getDirectoryHandle(folder, {create: true});
-  const media = {clips: {}, logo: null, icon: null, intro: null, outro: null}, used = [...new Set(edl.body.map(s => s.clip))];
+  const media = {clips: {}, logo: null, icon: null, intro: null, outro: null}, used = [...new Set(edl.body.map(s => s.clip))], sources = {};
   for (let i = 0; i < used.length; i++) {
     const c = clips.find(x => x.id === used[i]), ext = (c.name.match(/\.[a-z0-9]+$/i) || ['.mp4'])[0].toLowerCase(), file = 'clip' + (i + 1) + ext;
     onProgress(i / (used.length + 3), 'Đang chép ' + c.name + ' vào CapCut...');
     await writeFile(draft, 'materials/' + file, c.file);
     media.clips[c.id] = {file, width: c.width, height: c.height, duration: c.duration, hasAudio: !!c.audioTrack};
+    sources[file] = {name: c.name, size: c.file.size};
   }
   await writeFile(draft, 'materials/logo.png', await (await fetch(ASSETS.logo)).blob());
   media.logo = {file: 'logo.png', width: ASSET_IMG.logo.naturalWidth, height: ASSET_IMG.logo.naturalHeight};
@@ -267,6 +268,8 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const mac = /Mac/i.test(navigator.platform || navigator.userAgent);
   const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: mac ? 'mac' : 'windows', waNumber: BRAND.number});
   for (const [rel, text] of Object.entries(out.files)) await writeFile(draft, rel, text);
+  /* lets the check-and-fix tool copy a clip back if materials/ loses it */
+  await writeFile(draft, 'vietlink.json', JSON.stringify({made: new Date().toISOString(), seed: edl.seed, sources}));
   await writeFile(dir, 'root_meta_info.json.bak-vietlink', rootText);
   root.all_draft_store = [out.entry, ...(root.all_draft_store || [])]; root.draft_ids = (root.draft_ids || 0) + 1;
   await writeFile(dir, 'root_meta_info.json', JSON.stringify(root));
