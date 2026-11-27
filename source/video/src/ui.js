@@ -55,6 +55,10 @@ function applyHairTexts(e, o) {
   const set = (style, text, make) => { const t = find(style); if (!text) { if (t) e.texts.splice(e.texts.indexOf(t), 1); return; } if (t) t.text = text; else e.texts.push(make()); };
   set('title', hairTitle(o.hair, o.inches), () => ({text: hairTitle(o.hair, o.inches), start: .2, end: len - .1, style: 'title', anim: 'fade', pos: 'low', y: .6, size: 1, color: 'brand'}));
   set('account', (o.account || '').trim(), () => ({text: o.account.trim(), start: .35, end: len - .1, style: 'account', anim: 'fade', pos: 'low', y: HAIR[o.hair] ? .655 : .8, size: 1, color: 'brand'}));
+  /* the description line follows the hair style */
+  const d = e.texts.find(t => t.hairDesc || Object.values(HAIR).some(h => h.desc === t.text));
+  if (HAIR[o.hair]) { if (d) { d.text = HAIR[o.hair].desc; d.hairDesc = true; } else if (len > 5) e.texts.push({hairDesc: true, text: HAIR[o.hair].desc, start: Math.min(len * .3, 3), end: Math.min(len - .5, len * .3 + 4), style: 'desc', anim: 'fade', pos: 'high', y: .27, size: 1, color: 'brand'}); }
+  else if (d) e.texts.splice(e.texts.indexOf(d), 1);
   set('watermark', o.watermark ? WATERMARK : '', () => ({text: WATERMARK, start: 0, end: len, style: 'watermark', anim: 'none', pos: 'high', y: .2, size: 1, color: 'brand'}));
   Object.assign(e, {hair: o.hair, inches: o.inches, account: (o.account || '').trim()});
 }

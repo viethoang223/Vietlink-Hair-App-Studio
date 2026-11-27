@@ -183,7 +183,7 @@ function generate(seed, clips, opts) {
   if (hair) {
     texts.push({text: hairTitle(opts.hair, opts.inches), start: .2, end: len - .1, style: 'title', anim: k < .2 ? 'fade' : r.pick(['fade', 'pop', 'rise', 'slide', 'spread']), pos: 'low', y: .6, size: 1, color: 'brand'});
     if (account) texts.push({text: account, start: .35, end: len - .1, style: 'account', anim: 'fade', pos: 'low', y: .655, size: 1, color: 'brand'});
-    if (len > 5) texts.push({text: hair.desc, start: Math.min(len * .3, 3), end: Math.min(len - .5, len * .3 + r.n(3, 4.5)), style: k < .3 ? 'desc' : r.pick(['desc', 'bar', 'pill', 'tag']), anim: r.pick(anims), pos: 'high', y: .27, size: r.n(.95, 1.1), color: r.pick(['brand', 'orange', 'red'])});
+    if (len > 5) texts.push({hairDesc: true, text: hair.desc, start: Math.min(len * .3, 3), end: Math.min(len - .5, len * .3 + r.n(3, 4.5)), style: k < .3 ? 'desc' : r.pick(['desc', 'bar', 'pill', 'tag']), anim: r.pick(anims), pos: 'high', y: .27, size: r.n(.95, 1.1), color: r.pick(['brand', 'orange', 'red'])});
   } else if (account) texts.push({text: account, start: .35, end: len - .1, style: 'account', anim: 'fade', pos: 'low', y: .8, size: 1, color: 'brand'});
   if (opts.watermark !== false) texts.push({text: WATERMARK, start: 0, end: len, style: 'watermark', anim: 'none', pos: 'high', y: .2, size: 1, color: 'brand'});
   if (!hair && r.yes(lerp(.75, 1, k))) texts.push({text: head, start: r.n(.3, 1), end: Math.min(len - .2, r.n(3.5, 6)), style: r.pick(styles), anim: r.pick(anims), pos: r.pick(['low', 'low', 'mid', 'high']), size: r.n(.9, 1.15), color: r.pick(['brand', 'orange', 'dark', 'red'])});
