@@ -373,7 +373,7 @@ function edit() {
         ccOut.replaceChildren(el('p', {}, '✅ Đã tạo dự án ', b, ' trong CapCut. Mở CapCut (nếu đang mở thì tắt hẳn rồi mở lại): dự án nằm đầu danh sách, mọi lớp tách rời để chỉnh tiếp.'),
           el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại thư mục CapCut', onclick: () => runCapcut(true)}));
       } catch (err) {
-        if (err.name === 'AbortError') ccOut.replaceChildren(el('p', {className: 'sub', textContent: 'Đã hủy chọn thư mục.'}));
+        if (err.name === 'AbortError') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Chưa chọn được thư mục. Nếu Chrome báo thư mục chứa tệp hệ thống: Chrome không cho trang web mở thư mục trong AppData, nơi CapCut lưu dự án mặc định.'}), el('p', {textContent: 'Cách xử lý (làm một lần): tạo thư mục thường, ví dụ D:\\CapCut Drafts → mở CapCut, vào Cài đặt → Global settings → Draft location (Vị trí bản nháp), chọn thư mục đó → tắt CapCut, mở lại một lần rồi tắt → bấm lại Mở trong CapCut và chọn thư mục mới.'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}));
         else if (err.message === 'wrongdir') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Thư mục "' + err.dirName + '" không phải thư mục dự án của CapCut. Hãy chọn đúng thư mục com.lveditor.draft (xem hướng dẫn ở trên).'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}));
         else ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Không tạo được dự án CapCut: ' + err.message}));
       }
@@ -382,8 +382,8 @@ function edit() {
     cc.onclick = () => runCapcut(false);
     const ccHelp = canCapcut()
       ? el('details', {className: 'sub'}, el('summary', {textContent: 'Lần đầu: chọn thư mục dự án của CapCut'}),
-          el('p', {textContent: 'Tắt CapCut trước khi bấm. Trong hộp chọn thư mục, dán đường dẫn dưới đây vào thanh địa chỉ rồi bấm Chọn thư mục.'}),
-          el('p', {}, el('b', {textContent: 'Windows: '}), '%LOCALAPPDATA%\\CapCut\\User Data\\Projects\\com.lveditor.draft'),
+          el('p', {textContent: 'Tắt CapCut trước khi bấm, rồi chọn thư mục dự án của CapCut (thư mục có file root_meta_info.json). Chrome không cho mở thư mục trong AppData, nơi CapCut lưu mặc định, nên lần đầu hãy đổi chỗ lưu: tạo thư mục thường, ví dụ D:\\CapCut Drafts → mở CapCut, vào Cài đặt → Global settings → Draft location (Vị trí bản nháp), chọn thư mục đó → tắt CapCut, mở lại một lần rồi tắt → bấm lại Mở trong CapCut và chọn thư mục mới.'}),
+          el('p', {}, el('b', {textContent: 'Chỗ lưu mặc định của CapCut (để tìm dự án cũ), Windows: '}), '%LOCALAPPDATA%\\CapCut\\User Data\\Projects\\com.lveditor.draft'),
           el('p', {}, el('b', {textContent: 'Mac: '}), 'trong hộp chọn bấm Cmd+Shift+G, dán ~/Movies/CapCut/User Data/Projects/com.lveditor.draft'),
           el('p', {textContent: 'Trình duyệt nhớ thư mục này cho các lần sau. Clip được chép vào dự án mới, file gốc của bạn và các dự án cũ không bị đụng tới.'}))
       : el('p', {className: 'sub', textContent: 'Mở trong CapCut cần Chrome hoặc Edge (Safari chưa cho trang web ghi vào thư mục trên máy).'});
