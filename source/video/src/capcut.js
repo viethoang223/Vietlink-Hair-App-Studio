@@ -245,11 +245,12 @@ function buildCapcutDraft(edl, media, opts) {
   for (const f of ['attachment_pc_common.json', 'draft_agency_config.json', 'performance_opt_info.json']) if (T['file:' + f]) files[f] = JSON.stringify(T['file:' + f]);
   /* the content file under the name this machine's CapCut reads (draft_info.json on the Mac app), and the Timelines
      copy only where CapCut uses Timelines */
-  if (opts.contentName && opts.contentName !== 'draft_content.json') files[opts.contentName] = contentText;
-  if (opts.timelines !== false) { files['Timelines/' + contentId + '/draft_content.json'] = contentText; if (opts.contentName && opts.contentName !== 'draft_content.json') files['Timelines/' + contentId + '/' + opts.contentName] = contentText; }
+  /* Windows builds read draft_content.json, the Mac app draft_info.json: write both, every version finds its own */
+  files['draft_info.json'] = contentText;
+  if (opts.timelines !== false) { files['Timelines/' + contentId + '/draft_content.json'] = contentText; files['Timelines/' + contentId + '/draft_info.json'] = contentText; }
   else { delete files['Timelines/project.json']; delete files['timeline_layout.json']; }
   const entry = Object.assign(ccClone(T.root_entry), {draft_id: draftId, draft_name: opts.folder, draft_fold_path: draftDir, draft_root_path: opts.rootPath.replace(/\//g, opts.os === 'mac' ? '/' : '\\'),
     draft_json_file: draftDir + (opts.os === 'mac' ? '/' : '\\') + (opts.contentName || 'draft_content.json'), draft_cover: '', tm_draft_create: now, tm_draft_modified: now, tm_duration: total, tm_draft_removed: 0, draft_timeline_materials_size: contentText.length});
-  return {files, entry, duration: total};
+  return {files, entry, duration: total, contentId, contentText};
 }
 if (typeof module !== 'undefined') module.exports = {buildCapcutDraft};

@@ -449,6 +449,11 @@ function edit() {
       P.pause(); cc.disabled = true;
       const bar = el('progress', {max: 1, value: 0}), lab = el('span', {className: 'sub'}); ccOut.replaceChildren(bar, lab);
       try {
+        if (ccMode() === 'timeline') {
+          const r = await sendToCapcutTimeline(e, VS.clips, (p, m) => { bar.value = p; lab.textContent = ' ' + m; }, forcePick);
+          ccOut.replaceChildren(el('p', {}, '✅ Đã thêm dòng thời gian ', el('b', {textContent: r.timeline}), ' vào dự án ', el('b', {textContent: r.project}), '. Mở CapCut (nếu đang mở thì tắt hẳn rồi mở lại), mở dự án đó rồi chọn dòng thời gian mới ở danh sách Timeline.'));
+          cc.disabled = false; paintTarget(); return;
+        }
         const name = await sendToCapcut(e, VS.clips, (p, m) => { bar.value = p; lab.textContent = ' ' + m; }, forcePick);
         const b = el('b', {textContent: name});
         ccOut.replaceChildren(el('p', {}, '✅ Đã tạo dự án ', b, ' trong CapCut. Mở CapCut (nếu đang mở thì tắt hẳn rồi mở lại): dự án nằm đầu danh sách, mọi lớp tách rời để chỉnh tiếp.'),
@@ -456,11 +461,45 @@ function edit() {
       } catch (err) {
         if (err.name === 'AbortError') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Chưa chọn được thư mục. Nếu Chrome báo thư mục chứa tệp hệ thống: Chrome không cho trang web mở thư mục trong AppData, nơi CapCut lưu dự án mặc định.'}), el('p', {textContent: 'Cách xử lý (làm một lần): tạo thư mục thường, ví dụ D:\\CapCut Drafts → mở CapCut, vào Cài đặt → Global settings → Draft location (Vị trí bản nháp), chọn thư mục đó → tắt CapCut, mở lại một lần rồi tắt → bấm lại Mở trong CapCut và chọn thư mục mới.'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}), fixBtn());
         else if (err.message === 'wrongdir') ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Thư mục "' + err.dirName + '" không phải thư mục dự án của CapCut. Hãy chọn đúng thư mục "Save to" trong CapCut → Settings → Draft (xem hướng dẫn ở trên).'}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại', onclick: () => runCapcut(true)}), fixBtn());
+        else if (err.code === 'notimelines') {
+          keepMode('new'); VS.ccTargetOk = false; paintTarget();
+          ccOut.replaceChildren(el('p', {className: 'err', textContent: err.message + ' Tính năng "dòng thời gian mới" đã được tắt cho dự án này; trang chuyển về Dự án CapCut mới.'}));
+        }
+        else if (err.code === 'notproject') ccOut.replaceChildren(el('p', {className: 'err', textContent: err.message}), el('button', {type: 'button', className: 'btn line small', textContent: 'Chọn lại dự án', onclick: () => runCapcut(true)}));
         else ccOut.replaceChildren(el('p', {className: 'err', textContent: 'Không tạo được dự án CapCut: ' + err.message}), fixBtn());
       }
       cc.disabled = false;
     };
     cc.onclick = () => runCapcut(false);
+    const ccMode = () => kept('vl_ccmode', 'new'), keepMode = m => keep('vl_ccmode', m);
+    const modeBox = el('div', {className: 'field'}), targetBox = el('div', {className: 'field'});
+    /* Shows the remembered project and whether its CapCut version has timelines; turns mode 2 on or off accordingly. */
+    async function paintTarget() {
+      let tp = null, d = await idb('readonly', st => st.get('capcutTarget')).catch(() => null);
+      if (d) { try { if (await d.queryPermission({mode: 'read'}) === 'granted') tp = await targetProfile(d); } catch (x) {} }
+      if (tp) VS.ccTargetOk = tp.timelines && !tp.encrypted && !!tp.content;
+      const off = VS.ccTargetOk === false;
+      if (off && ccMode() === 'timeline') keepMode('new');
+      const r1 = el('input', {type: 'radio', name: 'ccmode', checked: ccMode() === 'new'}), r2 = el('input', {type: 'radio', name: 'ccmode', checked: ccMode() === 'timeline', disabled: off});
+      r1.onchange = () => { keepMode('new'); paintTarget(); }; r2.onchange = () => { keepMode('timeline'); paintTarget(); };
+      modeBox.replaceChildren(el('label', {textContent: 'Lưu vào CapCut dưới dạng'}),
+        el('label', {className: 'tog'}, r1, 'Dự án CapCut mới'),
+        el('label', {className: 'tog' + (off ? ' off' : '')}, r2, 'Dòng thời gian mới trong một dự án có sẵn' + (off ? ' (dự án đã chọn dùng CapCut chưa có tính năng này)' : '')));
+      cc.textContent = ccMode() === 'timeline' ? '🎬 Thêm vào dự án ' + (tp ? '"' + tp.name + '"' : 'có sẵn') : '🎬 Mở trong CapCut';
+      if (ccMode() !== 'timeline' && !off) { targetBox.replaceChildren(); return; }
+      const addr = el('input', {type: 'text', className: 'txt', value: kept('vl_cctarget_path'), placeholder: 'vd /Users/mac/Movies/CapCut/User Data/Projects/com.lveditor.draft/0319'});
+      addr.oninput = () => keep('vl_cctarget_path', addr.value.trim());
+      const copyAddr = el('button', {type: 'button', className: 'btn line small', textContent: '📋 Chép địa chỉ', onclick: async () => { try { await navigator.clipboard.writeText(addr.value); copyAddr.textContent = '✅ Đã chép'; } catch (x) {} }});
+      const pickT = el('button', {type: 'button', className: 'btn line small', textContent: tp ? 'Đổi dự án đích' : 'Chọn dự án đích', onclick: async () => {
+        try { await navigator.clipboard.writeText(addr.value); } catch (x) {}
+        try { const t = await targetProfile(await capcutTarget(true)); VS.ccTargetOk = t.timelines && !t.encrypted && !!t.content; if (VS.ccTargetOk) keepMode('timeline'); } catch (x) {}
+        paintTarget();
+      }});
+      const status = !tp ? el('p', {className: 'sub', textContent: 'Chưa chọn dự án đích. Dán địa chỉ thư mục của dự án (bên trong com.lveditor.draft) vào ô trên, bấm Chọn dự án đích: địa chỉ được chép sẵn, chỉ cần dán vào hộp chọn (Windows: thanh địa chỉ; Mac: Cmd+Shift+G) rồi bấm Chọn. Từ lần sau trang tự bám theo dự án này.'})
+        : el('p', {className: tp.timelines && !tp.encrypted ? 'sub' : 'err', textContent: 'Dự án "' + tp.name + '" · CapCut ' + (tp.version || '?') + ' · ' + (tp.os || '') + ' · ' + (tp.encrypted ? 'file dự án bị mã hóa, không ghi được' : tp.timelines ? 'hỗ trợ nhiều dòng thời gian ✅ (' + tp.project.timelines.length + ' dòng hiện có)' : 'chưa hỗ trợ nhiều dòng thời gian ❌ → dùng Dự án CapCut mới')});
+      targetBox.replaceChildren(el('label', {textContent: 'Địa chỉ dự án CapCut đích (máy nhớ)'}), addr, el('div', {className: 'bar'}, pickT, copyAddr), status);
+    }
+    paintTarget();
     /* Check and fix: looks through the CapCut folder and repairs what it can (see capcut_fix.js). */
     const icon = {ok: '✅', warn: '⚠️', err: '❌', fixed: '🔧'};
     const runCheck = async fix => {
@@ -493,7 +532,7 @@ function edit() {
       : el('p', {className: 'sub', textContent: 'Mở trong CapCut cần Chrome hoặc Edge (Safari chưa cho trang web ghi vào thư mục trên máy).'});
     if (!canCapcut()) cc.disabled = true;
     return el('div', {}, card('Xuất video', el('p', {className: 'sub', textContent: 'MP4 1080×1920, 30 hình/giây, đúng chuẩn Reels và TikTok. Giữ trang này mở trong lúc xuất.'}), el('div', {className: 'bar'}, go, stop), out),
-      card('Chỉnh tiếp trong CapCut', el('p', {className: 'sub', textContent: 'Tạo một dự án CapCut từ bản này: từng đoạn cảnh, chữ, logo, số WhatsApp, chuyển cảnh, hiệu ứng và bộ lọc là lớp riêng để bạn tự chỉnh.'}), el('div', {className: 'bar'}, cc, checkBtn), ccHelp, ccOut));
+      card('Chỉnh tiếp trong CapCut', el('p', {className: 'sub', textContent: 'Tạo một dự án CapCut từ bản này: từng đoạn cảnh, chữ, logo, số WhatsApp, chuyển cảnh, hiệu ứng và bộ lọc là lớp riêng để bạn tự chỉnh.'}), modeBox, targetBox, el('div', {className: 'bar'}, cc, checkBtn), ccHelp, ccOut));
   };
 
   view.replaceChildren(el('div', {className: 'bar'}, el('button', {type: 'button', className: 'btn line', textContent: '← Chọn bản khác', onclick: () => { VS.sel = null; pick(); }})),

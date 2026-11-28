@@ -267,6 +267,72 @@ async function realRootPath(dir, root) {
   if (rp && rp.split('/').pop() === dir.name) return rp;
   throw new Error('Không xác định được đường dẫn thư mục CapCut. Hãy mở CapCut, tạo một dự án trống (để CapCut ghi danh sách ở chỗ lưu mới), tắt CapCut rồi bấm lại.');
 }
+/** Copies clips, logo, icon and the intro/outro cards into <project>/materials/<sub>, returns the media list. */
+async function copyMedia(draft, sub, edl, clips, onProgress) {
+  const pre = sub ? sub + '/' : '', media = {clips: {}, logo: null, icon: null, intro: null, outro: null}, used = [...new Set(edl.body.map(s => s.clip))], sources = {};
+  for (let i = 0; i < used.length; i++) {
+    const c = clips.find(x => x.id === used[i]), ext = (c.name.match(/\.[a-z0-9]+$/i) || ['.mp4'])[0].toLowerCase(), file = pre + 'clip' + (i + 1) + ext;
+    onProgress(i / (used.length + 3), 'Đang chép ' + c.name + ' vào CapCut...');
+    await writeFile(draft, 'materials/' + file, c.file);
+    media.clips[c.id] = {file, width: c.width, height: c.height, duration: c.duration, hasAudio: !!c.audioTrack};
+    sources[file] = {name: c.name, size: c.file.size};
+  }
+  await writeFile(draft, 'materials/' + pre + 'logo.png', await (await fetch(ASSET_IMG.logo.src)).blob());
+  media.logo = {file: pre + 'logo.png', width: ASSET_IMG.logo.naturalWidth, height: ASSET_IMG.logo.naturalHeight};
+  await writeFile(draft, 'materials/' + pre + 'whatsapp.png', await new Promise(ok => ASSET_IMG.iconGreen.toBlob(ok, 'image/png')));
+  media.icon = {file: pre + 'whatsapp.png', width: ASSET_IMG.iconGreen.width, height: ASSET_IMG.iconGreen.height};
+  const L = layout(edl);
+  if (edl.intro) { onProgress((used.length + 1) / (used.length + 3), 'Đang dựng intro...'); await writeFile(draft, 'materials/' + pre + 'intro.mp4', await exportMp4(edl, clips, () => {}, () => false, [0, L.introEnd])); media.intro = {file: pre + 'intro.mp4', duration: L.introEnd}; }
+  if (edl.outro) { onProgress((used.length + 2) / (used.length + 3), 'Đang dựng outro...'); await writeFile(draft, 'materials/' + pre + 'outro.mp4', await exportMp4(edl, clips, () => {}, () => false, [L.bodyEnd, L.total])); media.outro = {file: pre + 'outro.mp4', duration: L.total - L.bodyEnd}; }
+  return {media, sources};
+}
+const stampName = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + ' ' + p(d.getHours()) + p(d.getMinutes()); };
+
+/* ---------- mode 2: a new timeline inside an existing CapCut project ----------
+   CapCut builds with several timelines keep Timelines/project.json (list) and Timelines/<id>/draft_content.json (each
+   timeline). The user picks the project folder once; the browser remembers it. If that project's CapCut version has
+   no timelines, it says so (and the page falls back to a new project when the CapCut folder is known). */
+async function capcutTarget(forcePick) {
+  let d = forcePick ? null : await idb('readonly', st => st.get('capcutTarget')).catch(() => null);
+  if (d) { let perm = await d.queryPermission({mode: 'readwrite'}); if (perm !== 'granted') perm = await d.requestPermission({mode: 'readwrite'}); if (perm !== 'granted') d = null; }
+  if (!d) { d = await window.showDirectoryPicker({id: 'capcut-target', mode: 'readwrite'}); await idb('readwrite', st => st.put(d, 'capcutTarget')).catch(() => {}); }
+  return d;
+}
+/** What the chosen project supports, read from its own files. */
+async function targetProfile(d) {
+  const files = []; for await (const [n, h] of d.entries()) files.push(h.kind === 'directory' ? n + '/' : n);
+  const content = files.includes('draft_content.json') ? 'draft_content.json' : files.includes('draft_info.json') ? 'draft_info.json' : null;
+  let version = '', os = '', fold = '', encrypted = false, project = null;
+  if (content) { try { const t = (await (await (await d.getFileHandle(content)).getFile()).text()).trim(); if (!t.startsWith('{')) encrypted = true; else { const j = JSON.parse(t), pl = j.last_modified_platform || j.platform || {}; version = pl.app_version || ''; os = pl.os || ''; } } catch (e) { encrypted = true; } }
+  try { fold = JSON.parse(await (await (await d.getFileHandle('draft_meta_info.json')).getFile()).text()).draft_fold_path || ''; } catch (e) {}
+  try { project = JSON.parse(await (await (await (await d.getDirectoryHandle('Timelines')).getFileHandle('project.json')).getFile()).text()); } catch (e) {}
+  return {name: d.name, files, content, version, os, fold: String(fold).replace(/\\/g, '/'), encrypted, project, timelines: !!(project && Array.isArray(project.timelines))};
+}
+async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
+  const d = await capcutTarget(forcePick), tp = await targetProfile(d);
+  if (!tp.content) { const e = new Error('Thư mục "' + d.name + '" không phải một dự án CapCut (không có draft_content.json / draft_info.json). Hãy chọn đúng thư mục của dự án, nằm bên trong com.lveditor.draft.'); e.code = 'notproject'; throw e; }
+  if (tp.encrypted) throw new Error('Dự án "' + d.name + '" do CapCut bản mã hóa file tạo ra, trang chưa ghi được.');
+  if (!tp.timelines) { const e = new Error('CapCut ' + (tp.version || '') + ' của dự án "' + d.name + '" chưa có tính năng nhiều dòng thời gian.'); e.code = 'notimelines'; throw e; }
+  const name = 'Vietlink ' + stampName(), sub = 'vietlink-' + stampName().replace(' ', '-');
+  const {media, sources} = await copyMedia(d, sub, edl, clips, onProgress);
+  /* media paths are absolute under the project folder (as CapCut writes them) */
+  const fold = tp.fold && tp.fold.split('/').pop() === d.name ? tp.fold : null;
+  if (!fold) throw new Error('Không đọc được đường dẫn của dự án "' + d.name + '". Mở dự án này trong CapCut một lần rồi tắt CapCut, sau đó bấm lại.');
+  const out = buildCapcutDraft(edl, media, {rootPath: fold.slice(0, fold.lastIndexOf('/')), folder: d.name, os: tp.os === 'mac' ? 'mac' : 'windows', appVersion: tp.version, waNumber: BRAND.number});
+  const tl = await d.getDirectoryHandle('Timelines');
+  await writeFile(tl, out.contentId + '/draft_content.json', out.contentText);
+  await writeFile(tl, out.contentId + '/draft_info.json', out.contentText);
+  const now = Date.now() * 1000, project = tp.project;
+  await writeFile(tl, 'project.json.bak-vietlink', JSON.stringify(project));
+  project.timelines.push({create_time: now, id: out.contentId, is_marked_delete: false, name, update_time: now});
+  project.update_time = now;
+  await writeFile(tl, 'project.json', JSON.stringify(project));
+  let note = {}; try { note = JSON.parse(await (await (await d.getFileHandle('vietlink.json')).getFile()).text()); } catch (e) {}
+  note.timelines = [...(note.timelines || []), {name, id: out.contentId, made: new Date().toISOString(), sources}];
+  await writeFile(d, 'vietlink.json', JSON.stringify(note));
+  onProgress(1, 'Xong');
+  return {project: d.name, timeline: name, version: tp.version};
+}
 async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const dir = await capcutFolder(forcePick);
   const rootFile = await (await dir.getFileHandle('root_meta_info.json')).getFile(), rootText = await rootFile.text(), root = JSON.parse(rootText);
@@ -277,21 +343,7 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const rootPath = await realRootPath(dir, root), prof = await capcutProfile(dir, root);
   if (prof.encrypted) throw new Error('CapCut bản ' + (prof.app_version || 'này') + ' trên máy này mã hóa file dự án, trang chưa ghi được. Bấm 🩺 Kiểm tra → 📋 Sao chép báo cáo và gửi người hỗ trợ.');
   const draft = await dir.getDirectoryHandle(folder, {create: true});
-  const media = {clips: {}, logo: null, icon: null, intro: null, outro: null}, used = [...new Set(edl.body.map(s => s.clip))], sources = {};
-  for (let i = 0; i < used.length; i++) {
-    const c = clips.find(x => x.id === used[i]), ext = (c.name.match(/\.[a-z0-9]+$/i) || ['.mp4'])[0].toLowerCase(), file = 'clip' + (i + 1) + ext;
-    onProgress(i / (used.length + 3), 'Đang chép ' + c.name + ' vào CapCut...');
-    await writeFile(draft, 'materials/' + file, c.file);
-    media.clips[c.id] = {file, width: c.width, height: c.height, duration: c.duration, hasAudio: !!c.audioTrack};
-    sources[file] = {name: c.name, size: c.file.size};
-  }
-  await writeFile(draft, 'materials/logo.png', await (await fetch(ASSET_IMG.logo.src)).blob());
-  media.logo = {file: 'logo.png', width: ASSET_IMG.logo.naturalWidth, height: ASSET_IMG.logo.naturalHeight};
-  await writeFile(draft, 'materials/whatsapp.png', await new Promise(ok => ASSET_IMG.iconGreen.toBlob(ok, 'image/png')));
-  media.icon = {file: 'whatsapp.png', width: ASSET_IMG.iconGreen.width, height: ASSET_IMG.iconGreen.height};
-  const L = layout(edl);
-  if (edl.intro) { onProgress((used.length + 1) / (used.length + 3), 'Đang dựng intro...'); await writeFile(draft, 'materials/intro.mp4', await exportMp4(edl, clips, () => {}, () => false, [0, L.introEnd])); media.intro = {file: 'intro.mp4', duration: L.introEnd}; }
-  if (edl.outro) { onProgress((used.length + 2) / (used.length + 3), 'Đang dựng outro...'); await writeFile(draft, 'materials/outro.mp4', await exportMp4(edl, clips, () => {}, () => false, [L.bodyEnd, L.total])); media.outro = {file: 'outro.mp4', duration: L.total - L.bodyEnd}; }
+  const {media, sources} = await copyMedia(draft, '', edl, clips, onProgress);
   const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: prof.os === 'mac' ? 'mac' : 'windows', appVersion: prof.app_version, contentName: prof.contentName, timelines: prof.timelines, waNumber: BRAND.number});
   for (const [rel, text] of Object.entries(out.files)) await writeFile(draft, rel, text);
   /* lets the check-and-fix tool copy a clip back if materials/ loses it */
