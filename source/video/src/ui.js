@@ -473,6 +473,8 @@ function edit() {
     cc.onclick = () => runCapcut(false);
     const ccMode = () => kept('vl_ccmode', 'new'), keepMode = m => keep('vl_ccmode', m);
     const modeBox = el('div', {className: 'field'}), targetBox = el('div', {className: 'field'});
+    const libBox = el('div', {className: 'field'}, toggle('Thêm chuyển cảnh, hiệu ứng, hoạt ảnh chữ từ thư viện CapCut (chỉ loại đã có trên máy này). Tắt = CapCut không bao giờ đòi cập nhật.', libraryMode() === 'known', v => keep('vl_cclib', v ? '1' : '0')),
+      el('p', {className: 'sub', textContent: 'Mặc định tắt: dự án CapCut chỉ gồm các đoạn cắt, chuyển động, chữ, logo, WhatsApp, intro/outro, chạy được trên mọi bản CapCut. Chuyển cảnh và hiệu ứng bạn thêm trong CapCut.'}));
     /* Shows the remembered project and whether its CapCut version has timelines; turns mode 2 on or off accordingly. */
     async function paintTarget() {
       let tp = null, d = await idb('readonly', st => st.get('capcutTarget')).catch(() => null);
@@ -532,7 +534,7 @@ function edit() {
       : el('p', {className: 'sub', textContent: 'Mở trong CapCut cần Chrome hoặc Edge (Safari chưa cho trang web ghi vào thư mục trên máy).'});
     if (!canCapcut()) cc.disabled = true;
     return el('div', {}, card('Xuất video', el('p', {className: 'sub', textContent: 'MP4 1080×1920, 30 hình/giây, đúng chuẩn Reels và TikTok. Giữ trang này mở trong lúc xuất.'}), el('div', {className: 'bar'}, go, stop), out),
-      card('Chỉnh tiếp trong CapCut', el('p', {className: 'sub', textContent: 'Tạo một dự án CapCut từ bản này: từng đoạn cảnh, chữ, logo, số WhatsApp, chuyển cảnh, hiệu ứng và bộ lọc là lớp riêng để bạn tự chỉnh.'}), modeBox, targetBox, el('div', {className: 'bar'}, cc, checkBtn), ccHelp, ccOut));
+      card('Chỉnh tiếp trong CapCut', el('p', {className: 'sub', textContent: 'Tạo một dự án CapCut từ bản này: từng đoạn cảnh, chữ, logo, số WhatsApp, chuyển cảnh, hiệu ứng và bộ lọc là lớp riêng để bạn tự chỉnh.'}), modeBox, targetBox, libBox, el('div', {className: 'bar'}, cc, checkBtn), ccHelp, ccOut));
   };
 
   view.replaceChildren(el('div', {className: 'bar'}, el('button', {type: 'button', className: 'btn line', textContent: '← Chọn bản khác', onclick: () => { VS.sel = null; pick(); }})),

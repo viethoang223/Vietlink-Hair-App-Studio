@@ -340,7 +340,8 @@ async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   /* media paths are absolute under the project folder (as CapCut writes them) */
   const fold = tp.fold && tp.fold.split('/').pop() === d.name ? tp.fold : null;
   if (!fold) throw new Error('Không đọc được đường dẫn của dự án "' + d.name + '". Mở dự án này trong CapCut một lần rồi tắt CapCut, sau đó bấm lại.');
-  const out = buildCapcutDraft(edl, media, {rootPath: fold.slice(0, fold.lastIndexOf('/')), folder: d.name, os: tp.os === 'mac' ? 'mac' : 'windows', appVersion: tp.version, newVersion: tp.newVersion, waNumber: BRAND.number});
+  const out = buildCapcutDraft(edl, media, {rootPath: fold.slice(0, fold.lastIndexOf('/')), folder: d.name, os: tp.os === 'mac' ? 'mac' : 'windows', appVersion: tp.version, newVersion: tp.newVersion, waNumber: BRAND.number,
+    ...(await libraryOpts([d], tp.newVersion))});
   const tl = await d.getDirectoryHandle('Timelines');
   /* same content file name as the project's own timelines use */
   await writeFile(tl, out.contentId + '/' + (tp.content || 'draft_content.json'), out.contentText);
@@ -359,6 +360,11 @@ async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   onProgress(1, 'Xong');
   return {project: d.name, timeline: name, version: tp.version};
 }
+/** library: 'none' (default, nothing from CapCut's online library) or the items this machine already uses; platform from the machine. */
+async function libraryOpts(dirs, newVersion) {
+  const scan = await machineLibrary(dirs, newVersion);
+  return {library: libraryMode() === 'known' ? scan.known : 'none', platform: scan.platform || undefined};
+}
 async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const dir = await capcutFolder(forcePick);
   const rootFile = await (await dir.getFileHandle('root_meta_info.json')).getFile(), rootText = await rootFile.text(), root = JSON.parse(rootText);
@@ -370,7 +376,8 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   if (prof.encrypted) throw new Error('CapCut bản ' + (prof.app_version || 'này') + ' trên máy này mã hóa file dự án, trang chưa ghi được. Bấm 🩺 Kiểm tra → 📋 Sao chép báo cáo và gửi người hỗ trợ.');
   const draft = await dir.getDirectoryHandle(folder, {create: true});
   const {media, sources} = await copyMedia(draft, '', edl, clips, onProgress);
-  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: prof.os === 'mac' ? 'mac' : 'windows', appVersion: prof.app_version, contentName: prof.contentName, timelines: prof.timelines, newVersion: prof.newVersion, waNumber: BRAND.number});
+  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: prof.os === 'mac' ? 'mac' : 'windows', appVersion: prof.app_version, contentName: prof.contentName, timelines: prof.timelines, newVersion: prof.newVersion, waNumber: BRAND.number,
+    ...(await libraryOpts([...(await projectDirs(dir))], prof.newVersion))});
   for (const [rel, text] of Object.entries(out.files)) await writeFile(draft, rel, text);
   /* lets the check-and-fix tool copy a clip back if materials/ loses it */
   await writeFile(draft, 'vietlink.json', JSON.stringify({made: new Date().toISOString(), seed: edl.seed, sources}));

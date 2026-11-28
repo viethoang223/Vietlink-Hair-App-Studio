@@ -60,6 +60,13 @@ function buildCapcutDraft(edl, media, opts) {
   c.tracks = [];
   const plat = {os: opts.os || 'windows', os_version: '', app_id: 359289, app_version: opts.appVersion || '9.6.0', app_source: 'cc', device_id: '', hard_disk_id: '', mac_address: ''};
   c.platform = ccClone(plat); c.last_modified_platform = ccClone(plat);
+  /* the machine's own platform block (app id differs between Windows and Mac builds) */
+  if (opts.platform) { c.platform = ccClone(opts.platform); c.last_modified_platform = ccClone(opts.platform); }
+  /* CapCut library items (transitions, effects, filters, text animations) can make an older CapCut ask for an
+     update. opts.library: 'none' = leave them all out (the safe default in the page), a Set of resource ids = only
+     those already used on this machine, undefined = all (tests). */
+  const libOk = rid => opts.library === undefined ? true : opts.library instanceof Set ? opts.library.has(String(rid)) : false;
+  const skipped = {transitions: 0, effects: 0, filters: 0, animations: 0};
   const M = c.materials, add = (kind, obj) => { (M[kind] = M[kind] || []).push(obj); return obj.id; };
 
   /* helper materials every video/photo segment points to */
@@ -113,7 +120,8 @@ function buildCapcutDraft(edl, media, opts) {
     if (s.move === 'drift') { const sc = cover * (1.06 + a * .8); seg.clip.scale = {x: sc, y: sc}; kfs.push(['KFTypeRotation', [[k0, -a * 10], [k1, a * 10]]]); }
     seg.common_keyframes = kfs.map(([p, pts]) => keyframes(p, pts));
     /* transition into this scene sits on the previous segment */
-    if (i && s.trans !== 'cut' && CC_TRANS[s.trans]) {
+    if (i && s.trans !== 'cut' && CC_TRANS[s.trans] && !libOk(CC_TRANS[s.trans][1])) skipped.transitions++;
+    if (i && s.trans !== 'cut' && CC_TRANS[s.trans] && libOk(CC_TRANS[s.trans][1])) {
       const [name, rid] = CC_TRANS[s.trans], prev = main[main.length - 1];
       const dur = Math.min(US(Math.max(s.tDur, .2)), Math.floor(prev.target_timerange.duration / 2), Math.floor(durT / 2));
       const tr = Object.assign(ccClone(T['transitions:transition']), {id: ccUuid(), name, effect_id: rid, resource_id: rid, third_resource_id: rid, source_platform: 1, path: '', duration: dur, is_overlap: true, platform: 'all', request_id: ''});
@@ -135,6 +143,7 @@ function buildCapcutDraft(edl, media, opts) {
   const fxSegs = [];
   segStarts.forEach(([st, dur, s]) => {
     const fx = CC_FX[s.fx]; if (!fx) return;
+    if (!libOk(fx[1])) { skipped.effects++; return; }
     const e = Object.assign(ccClone(T['video_effects:video_effect']), {id: ccUuid(), name: fx[0], effect_id: fx[1], resource_id: fx[1], path: '', request_id: '', adjust_params: [], common_keyframes: []});
     add('video_effects', e);
     fxSegs.push(Object.assign(segment('effect', e.id, st, s.fx === 'flashIn' ? Math.min(dur, 400000) : dur), {clip: null, source_timerange: null}));
@@ -142,7 +151,8 @@ function buildCapcutDraft(edl, media, opts) {
 
   /* ---- look → one filter over the scenes ---- */
   const filterSegs = [];
-  if (edl.look !== 'none' && CC_FILTER[edl.look] && bodyEnd > bodyStart) {
+  if (edl.look !== 'none' && CC_FILTER[edl.look] && !libOk(CC_FILTER[edl.look][1])) skipped.filters++;
+  if (edl.look !== 'none' && CC_FILTER[edl.look] && libOk(CC_FILTER[edl.look][1]) && bodyEnd > bodyStart) {
     const [name, rid] = CC_FILTER[edl.look];
     const f = Object.assign(ccClone(T['effects:filter']), {id: ccUuid(), name, effect_id: rid, resource_id: rid, third_resource_id: rid, path: '', request_id: '', value: Math.max(.2, Math.min(1, edl.lookAmt || .6)), adjust_params: []});
     add('effects', f);
@@ -185,8 +195,8 @@ function buildCapcutDraft(edl, media, opts) {
   const textAnim = (inAnim, durUs) => {
     const list = [], mk = ([name, rid, d], type) => Object.assign(ccClone(T.animation), {id: rid, type, start: type === 'out' ? Math.max(0, durUs - d) : 0, duration: Math.min(d, Math.floor(durUs / 2)),
       path: '', platform: 'all', resource_id: rid, third_resource_id: '0', source_platform: 1, name, category_id: type === 'in' ? 'ruchang' : 'chuchang', category_name: type === 'in' ? 'In' : 'Out', panel: '', material_type: 'sticker', request_id: ''});
-    if (CC_TEXT_IN[inAnim]) list.push(mk(CC_TEXT_IN[inAnim], 'in'));
-    list.push(mk(CC_TEXT_OUT, 'out'));
+    if (CC_TEXT_IN[inAnim]) { if (libOk(CC_TEXT_IN[inAnim][1])) list.push(mk(CC_TEXT_IN[inAnim], 'in')); else skipped.animations++; }
+    if (libOk(CC_TEXT_OUT[1])) list.push(mk(CC_TEXT_OUT, 'out')); else skipped.animations++;
     return add('material_animations', Object.assign(ccClone(T['material_animations:sticker_animation']), {id: ccUuid(), animations: list}));
   };
   const textSeg = (matId, startUs, durUs, x, y, animId) => Object.assign(segment('text', matId, startUs, durUs, {source_timerange: null, extra_material_refs: animId ? [animId] : []}),
@@ -255,6 +265,6 @@ function buildCapcutDraft(edl, media, opts) {
   else { delete files['Timelines/project.json']; delete files['timeline_layout.json']; }
   const entry = Object.assign(ccClone(T.root_entry), {draft_id: draftId, draft_name: opts.folder, draft_fold_path: draftDir, draft_root_path: opts.rootPath.replace(/\//g, opts.os === 'mac' ? '/' : '\\'),
     draft_json_file: draftDir + (opts.os === 'mac' ? '/' : '\\') + (opts.contentName || 'draft_content.json'), draft_cover: '', tm_draft_create: now, tm_draft_modified: now, tm_duration: total, tm_draft_removed: 0, draft_timeline_materials_size: contentText.length});
-  return {files, entry, duration: total, contentId, contentText};
+  return {files, entry, duration: total, contentId, contentText, skipped};
 }
 if (typeof module !== 'undefined') module.exports = {buildCapcutDraft};

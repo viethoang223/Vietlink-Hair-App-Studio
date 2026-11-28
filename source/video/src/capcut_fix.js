@@ -58,6 +58,50 @@ async function contentFiles(d) {
   if (await exists(d, 'Timelines', 'dir')) { const tl = await d.getDirectoryHandle('Timelines'); for (const id of await listDirs(tl)) { const t = await tl.getDirectoryHandle(id); for (const n of ['draft_content.json', 'draft_info.json']) if (await exists(t, n)) out.push([t, n]); } }
   return out;
 }
+
+/* ---------- CapCut library items: what this machine's CapCut already uses ---------- */
+const LIB_KINDS = ['transitions', 'video_effects', 'effects', 'material_animations'];
+/** Resource ids of library items inside one content JSON. */
+function libraryIds(c) {
+  const out = new Set(), m = (c && c.materials) || {};
+  for (const t of m.transitions || []) out.add(String(t.resource_id || t.effect_id));
+  for (const e of m.video_effects || []) out.add(String(e.resource_id || e.effect_id));
+  for (const e of m.effects || []) if (e.resource_id) out.add(String(e.resource_id));
+  for (const a of m.material_animations || []) for (const x of a.animations || []) out.add(String(x.resource_id || x.id));
+  out.delete(''); out.delete('undefined'); return out;
+}
+/** Items used by projects CapCut made on this machine (never newer than the machine's format), plus the platform block. */
+async function machineLibrary(dirs, maxVersion) {
+  const known = new Set(); let platform = null, n = 0;
+  for (const d of dirs) {
+    if (!d || VL_PREFIX.test(d.name)) continue;
+    for (const [h, name] of await contentFiles(d)) {
+      if (n++ > 120) break;
+      try {
+        const c = JSON.parse(await readText(h, name));
+        if (maxVersion && verNum(c.new_version) > verNum(maxVersion)) continue;
+        libraryIds(c).forEach(id => known.add(id));
+        if (!platform && c.last_modified_platform && c.last_modified_platform.app_id) platform = c.last_modified_platform;
+      } catch (e) {}
+    }
+  }
+  return {known, platform};
+}
+/** Removes library items a CapCut may not have from a content JSON. Returns the count removed. */
+function stripLibrary(c, allowed) {
+  const m = c.materials || {}, ok = rid => allowed instanceof Set && allowed.has(String(rid));
+  const gone = new Set(); let count = 0;
+  for (const k of ['transitions', 'video_effects']) m[k] = (m[k] || []).filter(x => { const keep = ok(x.resource_id || x.effect_id); if (!keep) { gone.add(x.id); count++; } return keep; });
+  m.effects = (m.effects || []).filter(x => { const keep = x.type !== 'filter' || ok(x.resource_id); if (!keep) { gone.add(x.id); count++; } return keep; });
+  for (const a of m.material_animations || []) { const before = (a.animations || []).length; a.animations = (a.animations || []).filter(x => ok(x.resource_id || x.id)); count += before - a.animations.length; }
+  for (const t of c.tracks || []) {
+    for (const s of t.segments || []) s.extra_material_refs = (s.extra_material_refs || []).filter(r => !gone.has(r));
+    if (t.type === 'effect' || t.type === 'filter') t.segments = (t.segments || []).filter(s => !gone.has(s.material_id));
+  }
+  c.tracks = (c.tracks || []).filter(t => t.segments && t.segments.length || t.type === 'video');
+  return count;
+}
+const libraryMode = () => { try { return localStorage.getItem('vl_cclib') === '1' ? 'known' : 'none'; } catch (e) { return 'none'; } };
 const profileText = p => p.sample ? 'Dự án mẫu do CapCut tạo: "' + p.sample + '" · file nội dung ' + p.contentName + ' · bản CapCut ' + (p.app_version || '?') + ' (định dạng ' + (p.newVersion || '?') + ') · ' + p.os + (p.encrypted ? ' · ĐÃ MÃ HÓA' : '') + ' · các file: ' + p.files.join(', ')
   : 'Chưa thấy dự án nào do CapCut tạo trong thư mục này (nên mở CapCut tạo 1 dự án trống rồi tắt).';
 
@@ -108,7 +152,7 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
   else say('ok', 'Đường dẫn thư mục: ' + real + '.');
 
   /* 3. every Vietlink project in the folder */
-  let rootChanged = false;
+  let rootChanged = false, lib = null;
   const entries = root.all_draft_store = root.all_draft_store || [];
   const names = (await listDirs(dir)).filter(n => VL_PREFIX.test(n));
   if (!names.length) say('ok', 'Chưa có dự án Vietlink nào trong thư mục này.');
@@ -188,6 +232,13 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
       if (fix) { let proj = {timelines: []}; try { proj = JSON.parse(await readText(draft, 'Timelines/project.json')); } catch (e) {} await writeFile(draft, 'timeline_layout.json', JSON.stringify(dockWith(null, proj))); say('fixed', '"' + name + '": đã dựng lại file bố cục dòng thời gian bị hỏng.'); }
       else say('err', '"' + name + '": file bố cục dòng thời gian bị hỏng.', true);
     }
+    /* 3a''''. library items this machine's CapCut may not have (they make it ask to update to a beta) */
+    {
+      const allowed = libraryMode() === 'known' ? (lib || (lib = await machineLibrary(await projectDirs(dir), prof.newVersion))).known : new Set();
+      let n = 0;
+      for (const [h, f] of await contentFiles(draft)) { const c = JSON.parse(await readText(h, f)), k = stripLibrary(c, allowed); if (k) { n += k; if (fix) await writeFile(h, f, JSON.stringify(c)); } }
+      if (n) say(fix ? 'fixed' : 'err', '"' + name + '": ' + (fix ? 'đã gỡ ' + n + ' mục thư viện CapCut (chuyển cảnh/hiệu ứng/hoạt ảnh) để CapCut không đòi cập nhật. Thêm lại trong CapCut nếu cần.' : 'có ' + n + ' mục thư viện CapCut có thể làm CapCut đòi cập nhật.'), !fix);
+    }
     /* 3b'. the file this machine's CapCut opens (draft_info.json on the Mac app) */
     if (prof.contentName !== 'draft_content.json' && !(await exists(draft, prof.contentName))) {
       if (fix) { await writeFile(draft, prof.contentName, JSON.stringify(content)); say('fixed', '"' + name + '": đã thêm file ' + prof.contentName + ' mà CapCut trên máy này cần để mở dự án.'); }
@@ -227,6 +278,9 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
         if (n !== own && await exists(t, 'Timelines/' + tl.id + '/' + own)) { newer++; if (fix) await (await (await t.getDirectoryHandle('Timelines')).getDirectoryHandle(tl.id)).removeEntry(n); continue; }
         const txt = downgradeContent(await readText(t, rel), nv, av); if (txt) { newer++; if (fix) await writeFile(t, rel, txt); }
       }
+      { const allowed = libraryMode() === 'known' ? (await machineLibrary([t], nv)).known : new Set(); let k = 0;
+        for (const tl of note.timelines || []) for (const n of ['draft_content.json', 'draft_info.json']) { const rel = 'Timelines/' + tl.id + '/' + n; if (!(await exists(t, rel))) continue; const c = JSON.parse(await readText(t, rel)), r = stripLibrary(c, allowed); if (r) { k += r; if (fix) await writeFile(t, rel, JSON.stringify(c)); } }
+        if (k) say(fix ? 'fixed' : 'err', 'Dự án đích "' + t.name + '": ' + (fix ? 'đã gỡ ' + k + ' mục thư viện CapCut khỏi các dòng thời gian Vietlink (hết đòi cập nhật).' : 'dòng thời gian Vietlink có ' + k + ' mục thư viện CapCut có thể làm CapCut đòi cập nhật.'), !fix); }
       if (newer) say(fix ? 'fixed' : 'err', 'Dự án đích "' + t.name + '": ' + (fix ? 'đã hạ định dạng các dòng thời gian Vietlink về ' + nv + '.' : 'dòng thời gian Vietlink ghi định dạng mới hơn CapCut của dự án này (' + av + '), nên CapCut đòi cập nhật.'), !fix);
 
       else say('ok', 'Dự án đích "' + t.name + '": các dòng thời gian Vietlink ổn.');
@@ -270,3 +324,6 @@ async function savedCapcutDir() {
   if (perm !== 'granted') perm = await dir.requestPermission({mode: 'readwrite'});
   return perm === 'granted' ? dir : null;
 }
+
+/** Project folders CapCut made in the drafts folder (to learn which library items this machine uses). */
+async function projectDirs(dir) { const out = []; for await (const [n, h] of dir.entries()) if (h.kind === 'directory' && !n.startsWith('.') && !VL_PREFIX.test(n)) out.push(h); return out.slice(0, 40); }
