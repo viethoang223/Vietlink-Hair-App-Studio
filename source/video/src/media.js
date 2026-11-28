@@ -274,7 +274,8 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const base = 'Vietlink ' + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) + ' ' + pad(stamp.getHours()) + pad(stamp.getMinutes());
   let folder = base;
   for (let k = 2; ; k++) { try { await dir.getDirectoryHandle(folder); folder = base + ' (' + k + ')'; } catch (e) { break; } }
-  const rootPath = await realRootPath(dir, root);
+  const rootPath = await realRootPath(dir, root), prof = await capcutProfile(dir, root);
+  if (prof.encrypted) throw new Error('CapCut bản ' + (prof.app_version || 'này') + ' trên máy này mã hóa file dự án, trang chưa ghi được. Bấm 🩺 Kiểm tra → 📋 Sao chép báo cáo và gửi người hỗ trợ.');
   const draft = await dir.getDirectoryHandle(folder, {create: true});
   const media = {clips: {}, logo: null, icon: null, intro: null, outro: null}, used = [...new Set(edl.body.map(s => s.clip))], sources = {};
   for (let i = 0; i < used.length; i++) {
@@ -291,8 +292,7 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   const L = layout(edl);
   if (edl.intro) { onProgress((used.length + 1) / (used.length + 3), 'Đang dựng intro...'); await writeFile(draft, 'materials/intro.mp4', await exportMp4(edl, clips, () => {}, () => false, [0, L.introEnd])); media.intro = {file: 'intro.mp4', duration: L.introEnd}; }
   if (edl.outro) { onProgress((used.length + 2) / (used.length + 3), 'Đang dựng outro...'); await writeFile(draft, 'materials/outro.mp4', await exportMp4(edl, clips, () => {}, () => false, [L.bodyEnd, L.total])); media.outro = {file: 'outro.mp4', duration: L.total - L.bodyEnd}; }
-  const mac = /Mac/i.test(navigator.platform || navigator.userAgent);
-  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: mac ? 'mac' : 'windows', waNumber: BRAND.number});
+  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: prof.os === 'mac' ? 'mac' : 'windows', appVersion: prof.app_version, contentName: prof.contentName, timelines: prof.timelines, waNumber: BRAND.number});
   for (const [rel, text] of Object.entries(out.files)) await writeFile(draft, rel, text);
   /* lets the check-and-fix tool copy a clip back if materials/ loses it */
   await writeFile(draft, 'vietlink.json', JSON.stringify({made: new Date().toISOString(), seed: edl.seed, sources}));

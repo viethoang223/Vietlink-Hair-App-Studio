@@ -56,7 +56,7 @@ function buildCapcutDraft(edl, media, opts) {
   c.canvas_config = {ratio: '9:16', width: W, height: H, background: null};
   for (const k of Object.keys(c.materials)) c.materials[k] = [];
   c.tracks = [];
-  const plat = {os: opts.os || 'windows', os_version: '', app_id: 359289, app_version: '9.6.0', app_source: 'cc', device_id: '', hard_disk_id: '', mac_address: ''};
+  const plat = {os: opts.os || 'windows', os_version: '', app_id: 359289, app_version: opts.appVersion || '9.6.0', app_source: 'cc', device_id: '', hard_disk_id: '', mac_address: ''};
   c.platform = ccClone(plat); c.last_modified_platform = ccClone(plat);
   const M = c.materials, add = (kind, obj) => { (M[kind] = M[kind] || []).push(obj); return obj.id; };
 
@@ -237,15 +237,19 @@ function buildCapcutDraft(edl, media, opts) {
   const contentText = JSON.stringify(c), secs = Math.floor(now / 1e6);
   const files = {
     'draft_content.json': contentText,
-    ['Timelines/' + contentId + '/draft_content.json']: contentText,
     'Timelines/project.json': JSON.stringify(project),
     'draft_meta_info.json': JSON.stringify(meta),
     'draft_settings': `[General]\ndraft_create_time=${secs}\ndraft_last_edit_time=${secs}\nreal_edit_seconds=0\nreal_edit_keys=0\n`,
     'timeline_layout.json': JSON.stringify(layoutFile),
   };
   for (const f of ['attachment_pc_common.json', 'draft_agency_config.json', 'performance_opt_info.json']) if (T['file:' + f]) files[f] = JSON.stringify(T['file:' + f]);
+  /* the content file under the name this machine's CapCut reads (draft_info.json on the Mac app), and the Timelines
+     copy only where CapCut uses Timelines */
+  if (opts.contentName && opts.contentName !== 'draft_content.json') files[opts.contentName] = contentText;
+  if (opts.timelines !== false) { files['Timelines/' + contentId + '/draft_content.json'] = contentText; if (opts.contentName && opts.contentName !== 'draft_content.json') files['Timelines/' + contentId + '/' + opts.contentName] = contentText; }
+  else { delete files['Timelines/project.json']; delete files['timeline_layout.json']; }
   const entry = Object.assign(ccClone(T.root_entry), {draft_id: draftId, draft_name: opts.folder, draft_fold_path: draftDir, draft_root_path: opts.rootPath.replace(/\//g, opts.os === 'mac' ? '/' : '\\'),
-    draft_json_file: draftDir + (opts.os === 'mac' ? '/' : '\\') + 'draft_content.json', draft_cover: '', tm_draft_create: now, tm_draft_modified: now, tm_duration: total, tm_draft_removed: 0, draft_timeline_materials_size: contentText.length});
+    draft_json_file: draftDir + (opts.os === 'mac' ? '/' : '\\') + (opts.contentName || 'draft_content.json'), draft_cover: '', tm_draft_create: now, tm_draft_modified: now, tm_duration: total, tm_draft_removed: 0, draft_timeline_materials_size: contentText.length});
   return {files, entry, duration: total};
 }
 if (typeof module !== 'undefined') module.exports = {buildCapcutDraft};

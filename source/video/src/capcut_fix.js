@@ -15,6 +15,33 @@ async function exists(dir, rel, kind = 'file') {
 }
 async function listDirs(dir) { const out = []; for await (const [name, h] of dir.entries()) if (h.kind === 'directory') out.push(name); return out.sort(); }
 const norm = p => String(p || '').replace(/\\/g, '/');
+/* ---------- how CapCut on THIS machine stores projects ----------
+   CapCut differs by platform and version: Windows reads draft_content.json, the Mac app has used draft_info.json,
+   newer builds add Timelines/, and some builds encrypt the file. Instead of guessing, look at a project CapCut itself
+   made in the chosen folder and copy its layout. Only file names and a few top fields are read, never content. */
+async function capcutProfile(dir, root) {
+  const prof = {sample: '', files: [], contentName: 'draft_content.json', both: true, timelines: true, encrypted: false, app_version: '', os: /Mac/i.test(navigator.platform || navigator.userAgent) ? 'mac' : 'windows'};
+  const list = [...((root && root.all_draft_store) || [])].sort((a, b) => (b.tm_draft_modified || 0) - (a.tm_draft_modified || 0));
+  for (const e of list) {
+    const p = norm(e.draft_fold_path), name = p.slice(p.lastIndexOf('/') + 1);
+    if (!name || VL_PREFIX.test(name)) continue;
+    let d; try { d = await dir.getDirectoryHandle(name); } catch (x) { continue; }
+    const files = []; for await (const [n, h] of d.entries()) files.push(h.kind === 'directory' ? n + '/' : n);
+    const content = files.includes('draft_info.json') ? 'draft_info.json' : files.includes('draft_content.json') ? 'draft_content.json' : null;
+    if (!content) continue;
+    prof.sample = name; prof.files = files.sort(); prof.contentName = content; prof.timelines = files.includes('Timelines/');
+    try {
+      const head = (await readText(d, content)).trim();
+      if (!head.startsWith('{')) prof.encrypted = true;
+      else { const j = JSON.parse(head), pl = j.last_modified_platform || j.platform || {}; prof.app_version = pl.app_version || ''; if (pl.os) prof.os = pl.os; }
+    } catch (x) { prof.encrypted = true; }
+    break;
+  }
+  return prof;
+}
+const profileText = p => p.sample ? 'Dự án mẫu do CapCut tạo: "' + p.sample + '" · file nội dung ' + p.contentName + ' · bản CapCut ' + (p.app_version || '?') + ' · ' + p.os + (p.encrypted ? ' · ĐÃ MÃ HÓA' : '') + ' · các file: ' + p.files.join(', ')
+  : 'Chưa thấy dự án nào do CapCut tạo trong thư mục này (nên mở CapCut tạo 1 dự án trống rồi tắt).';
+
 
 /**
  * dir: the CapCut project folder handle (may be null). fix: repair as well as check. clips: clips still open in the
@@ -56,6 +83,8 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
   /* 2. the folder's real path */
   let real;
   try { real = await realRootPath(dir, root); } catch (e) { say('err', e.message); return out; }
+  const prof = await capcutProfile(dir, root);
+  say(prof.encrypted ? 'err' : prof.sample ? 'ok' : 'warn', profileText(prof) + (prof.encrypted ? ' — bản CapCut này mã hóa file dự án, trang chưa ghi được. Hãy gửi báo cáo này cho người hỗ trợ.' : ''));
   if (norm(root.root_path).replace(/\/+$/, '') !== real) say('warn', 'CapCut còn ghi đường dẫn gốc cũ (' + root.root_path + '). Trang dùng đường dẫn thật: ' + real + '.');
   else say('ok', 'Đường dẫn thư mục: ' + real + '.');
 
@@ -66,6 +95,7 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
   if (!names.length) say('ok', 'Chưa có dự án Vietlink nào trong thư mục này.');
   for (const name of names) {
     const draft = await dir.getDirectoryHandle(name), fold = real + '/' + name;
+    if (!(await exists(draft, 'draft_content.json')) && (await exists(draft, 'draft_info.json'))) await writeFile(draft, 'draft_content.json', await readText(draft, 'draft_info.json'));
     if (!(await exists(draft, 'draft_content.json'))) {
       if (fix && await confirmDelete('Dự án "' + name + '" chỉ tạo được một nửa (thiếu draft_content.json). Xóa thư mục này?')) {
         await dir.removeEntry(name, {recursive: true});
@@ -121,6 +151,11 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
       if (still.length) say('err', '"' + name + '": thiếu file ' + still.map(f => sources[f] ? f + ' (clip gốc ' + sources[f].name + ')' : f).join(', ') + ' trong thư mục materials. '
         + 'Nếu là clip: tải lại đúng clip gốc lên trang rồi bấm Tự sửa. Nếu không: xóa dự án này rồi bấm Mở trong CapCut lần nữa.');
     }
+    /* 3b'. the file this machine's CapCut opens (draft_info.json on the Mac app) */
+    if (prof.contentName !== 'draft_content.json' && !(await exists(draft, prof.contentName))) {
+      if (fix) { await writeFile(draft, prof.contentName, JSON.stringify(content)); say('fixed', '"' + name + '": đã thêm file ' + prof.contentName + ' mà CapCut trên máy này cần để mở dự án.'); }
+      else say('err', '"' + name + '": thiếu file ' + prof.contentName + ' nên CapCut trên máy này hiện dự án nhưng không mở được.', true);
+    }
     /* 3c. it must be in CapCut's list, with the right folder */
     const entry = entries.find(e => e.draft_name === name);
     if (!entry) {
@@ -128,12 +163,17 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
         let meta = {}; try { meta = JSON.parse(await readText(draft, 'draft_meta_info.json')); } catch (e) {}
         const now = Date.now() * 1000, sep = real.includes(':') ? '\\' : '/';
         entries.unshift(Object.assign(JSON.parse(JSON.stringify(CAPCUT_T.root_entry)), {draft_id: meta.draft_id || ccUuid(), draft_name: name, draft_fold_path: fold, draft_root_path: real.replace(/\//g, sep),
-          draft_json_file: fold + sep + 'draft_content.json', draft_cover: '', tm_draft_create: meta.tm_draft_create || now, tm_draft_modified: now, tm_duration: content.duration || 0, tm_draft_removed: 0}));
+          draft_json_file: fold + sep + prof.contentName, draft_cover: '', tm_draft_create: meta.tm_draft_create || now, tm_draft_modified: now, tm_duration: content.duration || 0, tm_draft_removed: 0}));
         rootChanged = true; say('fixed', '"' + name + '": đã thêm lại vào danh sách CapCut (thường do CapCut đang mở lúc tạo dự án).');
       } else say('err', '"' + name + '": có trong thư mục nhưng không có trong danh sách CapCut, nên CapCut không hiện.', true);
     } else if (norm(entry.draft_fold_path) !== fold) {
-      if (fix) { const sep = real.includes(':') ? '\\' : '/'; entry.draft_fold_path = fold; entry.draft_root_path = real.replace(/\//g, sep); entry.draft_json_file = fold + sep + 'draft_content.json'; rootChanged = true; say('fixed', '"' + name + '": đã sửa đường dẫn trong danh sách CapCut.'); }
+      if (fix) { const sep = real.includes(':') ? '\\' : '/'; entry.draft_fold_path = fold; entry.draft_root_path = real.replace(/\//g, sep); entry.draft_json_file = fold + sep + prof.contentName; rootChanged = true; say('fixed', '"' + name + '": đã sửa đường dẫn trong danh sách CapCut.'); }
       else say('err', '"' + name + '": danh sách CapCut ghi sai thư mục của dự án này.', true);
+    }
+    const ent = entries.find(e => e.draft_name === name);
+    if (ent && !norm(ent.draft_json_file).endsWith('/' + prof.contentName) && !String(ent.draft_json_file || '').endsWith(prof.contentName)) {
+      if (fix) { const sep = real.includes(':') ? '\\' : '/'; ent.draft_json_file = fold + sep + prof.contentName; rootChanged = true; say('fixed', '"' + name + '": danh sách CapCut giờ trỏ vào ' + prof.contentName + '.'); }
+      else say('err', '"' + name + '": danh sách CapCut trỏ vào file nội dung khác với file CapCut trên máy này dùng.', true);
     }
     if (!out.some(r => r.text.startsWith('"' + name + '"'))) say('ok', '"' + name + '": ổn.');
   }

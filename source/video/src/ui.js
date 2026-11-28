@@ -466,7 +466,14 @@ function edit() {
     const runCheck = async fix => {
       P.pause(); ccOut.replaceChildren(el('p', {className: 'sub', textContent: fix ? 'Đang kiểm tra và sửa...' : 'Đang kiểm tra...'}));
       let list;
-      try { list = await checkCapcut(await savedCapcutDir(), {fix, clips: VS.clips, confirmDelete: t => window.confirm(t)}); }
+      try {
+        let dir = await savedCapcutDir();
+        if (!dir && canCapcut()) {
+          ccOut.replaceChildren(el('p', {className: 'sub', textContent: 'Chọn thư mục dự án của CapCut (thư mục "Save to" trong CapCut → Settings → Draft; Mac mặc định: ~/Movies/CapCut/User Data/Projects/com.lveditor.draft, trong hộp chọn bấm Cmd+Shift+G để dán).'}));
+          try { dir = await window.showDirectoryPicker({id: 'capcut-drafts', mode: 'readwrite'}); await idb('readwrite', st => st.put(dir, 'capcutDir')).catch(() => {}); } catch (x) { dir = null; }
+        }
+        list = await checkCapcut(dir, {fix, clips: VS.clips, confirmDelete: t => window.confirm(t)});
+      }
       catch (err) { list = [{level: 'err', text: 'Lỗi khi kiểm tra: ' + err.message}]; }
       const copy = el('button', {type: 'button', className: 'btn line small', textContent: '📋 Sao chép báo cáo'});
       copy.onclick = async () => { try { await navigator.clipboard.writeText(checkReport(list)); copy.textContent = '✅ Đã chép, dán gửi người hỗ trợ'; } catch (x) { copy.textContent = 'Không chép được'; } };
