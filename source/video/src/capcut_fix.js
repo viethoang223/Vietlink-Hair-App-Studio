@@ -75,7 +75,10 @@ async function machineLibrary(dirs, maxVersion) {
   const known = new Set(); let platform = null, n = 0;
   for (const d of dirs) {
     if (!d || VL_PREFIX.test(d.name)) continue;
+    /* timelines this page added are not CapCut's own: never learn from them */
+    let ours = new Set(); try { ours = new Set((JSON.parse(await readText(d, 'vietlink.json')).timelines || []).map(t => t.id)); } catch (e) {}
     for (const [h, name] of await contentFiles(d)) {
+      if (ours.has(h.name)) continue;
       if (n++ > 120) break;
       try {
         const c = JSON.parse(await readText(h, name));
@@ -101,7 +104,7 @@ function stripLibrary(c, allowed) {
   c.tracks = (c.tracks || []).filter(t => t.segments && t.segments.length || t.type === 'video');
   return count;
 }
-const libraryMode = () => { try { return localStorage.getItem('vl_cclib') === '1' ? 'known' : 'none'; } catch (e) { return 'none'; } };
+const libraryMode = () => { try { return localStorage.getItem('vl_cclib') === '0' ? 'none' : 'known'; } catch (e) { return 'known'; } };
 const profileText = p => p.sample ? 'Dự án mẫu do CapCut tạo: "' + p.sample + '" · file nội dung ' + p.contentName + ' · bản CapCut ' + (p.app_version || '?') + ' (định dạng ' + (p.newVersion || '?') + ') · ' + p.os + (p.encrypted ? ' · ĐÃ MÃ HÓA' : '') + ' · các file: ' + p.files.join(', ')
   : 'Chưa thấy dự án nào do CapCut tạo trong thư mục này (nên mở CapCut tạo 1 dự án trống rồi tắt).';
 

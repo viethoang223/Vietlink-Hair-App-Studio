@@ -341,7 +341,7 @@ async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   const fold = tp.fold && tp.fold.split('/').pop() === d.name ? tp.fold : null;
   if (!fold) throw new Error('Không đọc được đường dẫn của dự án "' + d.name + '". Mở dự án này trong CapCut một lần rồi tắt CapCut, sau đó bấm lại.');
   const out = buildCapcutDraft(edl, media, {rootPath: fold.slice(0, fold.lastIndexOf('/')), folder: d.name, os: tp.os === 'mac' ? 'mac' : 'windows', appVersion: tp.version, newVersion: tp.newVersion, waNumber: BRAND.number,
-    ...(await libraryOpts([d], tp.newVersion))});
+    ...(await libraryOpts([d, ...(await grantedDraftDirs())], tp.newVersion))});
   const tl = await d.getDirectoryHandle('Timelines');
   /* same content file name as the project's own timelines use */
   await writeFile(tl, out.contentId + '/' + (tp.content || 'draft_content.json'), out.contentText);
@@ -360,7 +360,12 @@ async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   onProgress(1, 'Xong');
   return {project: d.name, timeline: name, version: tp.version};
 }
-/** library: 'none' (default, nothing from CapCut's online library) or the items this machine already uses; platform from the machine. */
+/** library: the items this machine's CapCut already has (default; they open without an update), or 'none'; platform from the machine. */
+/** Projects of the drafts folder chosen earlier, only if the browser still allows it (no prompt). */
+async function grantedDraftDirs() {
+  try { const dir = await idb('readonly', st => st.get('capcutDir')); if (dir && await dir.queryPermission({mode: 'read'}) === 'granted') return await projectDirs(dir); } catch (e) {}
+  return [];
+}
 async function libraryOpts(dirs, newVersion) {
   const scan = await machineLibrary(dirs, newVersion);
   return {library: libraryMode() === 'known' ? scan.known : 'none', platform: scan.platform || undefined};

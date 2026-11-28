@@ -473,8 +473,8 @@ function edit() {
     cc.onclick = () => runCapcut(false);
     const ccMode = () => kept('vl_ccmode', 'new'), keepMode = m => keep('vl_ccmode', m);
     const modeBox = el('div', {className: 'field'}), targetBox = el('div', {className: 'field'});
-    const libBox = el('div', {className: 'field'}, toggle('Thêm chuyển cảnh, hiệu ứng, hoạt ảnh chữ từ thư viện CapCut (chỉ loại đã có trên máy này). Tắt = CapCut không bao giờ đòi cập nhật.', libraryMode() === 'known', v => keep('vl_cclib', v ? '1' : '0')),
-      el('p', {className: 'sub', textContent: 'Mặc định tắt: dự án CapCut chỉ gồm các đoạn cắt, chuyển động, chữ, logo, WhatsApp, intro/outro, chạy được trên mọi bản CapCut. Chuyển cảnh và hiệu ứng bạn thêm trong CapCut.'}));
+    const libBox = el('div', {className: 'field'}, toggle('Chuyển cảnh, hiệu ứng, bộ lọc, hoạt ảnh chữ của CapCut (loại máy này đã có)', libraryMode() === 'known', v => keep('vl_cclib', v ? '1' : '0')),
+      el('p', {className: 'sub', textContent: 'Mặc định bật: chỉ dùng loại CapCut trên máy này đã tải về (đã từng dùng trong một dự án), nên mở ra không đòi cập nhật. Loại máy chưa có sẽ được bỏ qua, bạn thêm trong CapCut. Mọi chữ, đoạn cắt, logo, WhatsApp vẫn sửa được bình thường. Tắt = không dùng mục thư viện nào.'}));
     /* Shows the remembered project and whether its CapCut version has timelines; turns mode 2 on or off accordingly. */
     async function paintTarget() {
       let tp = null, d = await idb('readonly', st => st.get('capcutTarget')).catch(() => null);
