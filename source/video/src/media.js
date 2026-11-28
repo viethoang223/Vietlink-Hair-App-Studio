@@ -308,6 +308,28 @@ async function targetProfile(d) {
   try { project = JSON.parse(await (await (await (await d.getDirectoryHandle('Timelines')).getFileHandle('project.json')).getFile()).text()); } catch (e) {}
   return {name: d.name, files, content, version, newVersion, os, fold: String(fold).replace(/\\/g, '/'), encrypted, project, timelines: !!(project && Array.isArray(project.timelines))};
 }
+
+/* ---------- timeline tabs (timeline_layout.json) ----------
+   CapCut keeps which timelines show as tabs in which panel: {dockItems: [{dockIndex, ratio, timelineIds, timelineNames}]}.
+   A timeline missing from it gets a new panel (the split view). Ours go into the main panel as one more tab. */
+function dockWith(layout, project, addIds = [], moveIds = []) {
+  let L = layout && Array.isArray(layout.dockItems) && layout.dockItems.length ? JSON.parse(JSON.stringify(layout)) : null;
+  const names = Object.fromEntries((project.timelines || []).map(t => [t.id, t.name]));
+  if (!L) L = {dockItems: [{dockIndex: 0, ratio: 1, timelineIds: (project.timelines || []).filter(t => !t.is_marked_delete).map(t => t.id), timelineNames: (project.timelines || []).filter(t => !t.is_marked_delete).map(t => t.name)}], layoutOrientation: 1};
+  const main = L.dockItems.find(d => (d.timelineIds || []).includes(project.main_timeline_id)) || L.dockItems[0];
+  main.timelineIds = main.timelineIds || []; main.timelineNames = main.timelineNames || [];
+  for (const d of L.dockItems) if (d !== main) {
+    const keep = (d.timelineIds || []).map((id, i) => [id, (d.timelineNames || [])[i]]).filter(([id]) => !moveIds.includes(id));
+    for (const [id] of (d.timelineIds || []).map(x => [x]).filter(([id]) => moveIds.includes(id))) if (!main.timelineIds.includes(id)) { main.timelineIds.push(id); main.timelineNames.push(names[id] || ''); }
+    d.timelineIds = keep.map(k => k[0]); d.timelineNames = keep.map(k => k[1]);
+  }
+  for (const id of addIds) if (!main.timelineIds.includes(id)) { main.timelineIds.push(id); main.timelineNames.push(names[id] || ''); }
+  L.dockItems = L.dockItems.filter(d => (d.timelineIds || []).length);
+  L.dockItems.forEach((d, i) => { d.dockIndex = i; });
+  if (L.dockItems.length === 1) L.dockItems[0].ratio = 1;
+  return L;
+}
+async function readLayout(d) { try { return JSON.parse(await (await (await d.getFileHandle('timeline_layout.json')).getFile()).text()); } catch (e) { return null; } }
 async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   const d = await capcutTarget(forcePick), tp = await targetProfile(d);
   if (!tp.content) { const e = new Error('Thư mục "' + d.name + '" không phải một dự án CapCut (không có draft_content.json / draft_info.json). Hãy chọn đúng thư mục của dự án, nằm bên trong com.lveditor.draft.'); e.code = 'notproject'; throw e; }
@@ -327,6 +349,10 @@ async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   project.timelines.push({create_time: now, id: out.contentId, is_marked_delete: false, name, update_time: now});
   project.update_time = now;
   await writeFile(tl, 'project.json', JSON.stringify(project));
+  /* one more tab in the main timeline panel, not a new split panel */
+  const lay = await readLayout(d);
+  if (lay) await writeFile(d, 'timeline_layout.json.bak-vietlink', JSON.stringify(lay));
+  await writeFile(d, 'timeline_layout.json', JSON.stringify(dockWith(lay, project, [out.contentId])));
   let note = {}; try { note = JSON.parse(await (await (await d.getFileHandle('vietlink.json')).getFile()).text()); } catch (e) {}
   note.timelines = [...(note.timelines || []), {name, id: out.contentId, made: new Date().toISOString(), sources}];
   await writeFile(d, 'vietlink.json', JSON.stringify(note));

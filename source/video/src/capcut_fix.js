@@ -183,6 +183,11 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
       if (await exists(draft, 'Timelines', 'dir')) { const tl = await draft.getDirectoryHandle('Timelines'); for (const id of await listDirs(tl)) { const t = await tl.getDirectoryHandle(id); if (await exists(t, 'draft_info.json') && await exists(t, 'draft_content.json')) stray.push([t, 'draft_info.json']); } }
       if (stray.length) { if (fix) { for (const [h, n] of stray) await h.removeEntry(n); say('fixed', '"' + name + '": đã bỏ ' + stray.length + ' file draft_info.json thừa (làm CapCut đòi cập nhật).'); } else say('err', '"' + name + '": có file draft_info.json thừa nên CapCut ' + prof.app_version + ' đòi cập nhật lên bản mới hơn.', true); }
     }
+    /* 3a'''. tabs layout must be readable JSON (a damaged one was seen as all zero bytes) */
+    if (await exists(draft, 'timeline_layout.json') && !(await readLayout(draft))) {
+      if (fix) { let proj = {timelines: []}; try { proj = JSON.parse(await readText(draft, 'Timelines/project.json')); } catch (e) {} await writeFile(draft, 'timeline_layout.json', JSON.stringify(dockWith(null, proj))); say('fixed', '"' + name + '": đã dựng lại file bố cục dòng thời gian bị hỏng.'); }
+      else say('err', '"' + name + '": file bố cục dòng thời gian bị hỏng.', true);
+    }
     /* 3b'. the file this machine's CapCut opens (draft_info.json on the Mac app) */
     if (prof.contentName !== 'draft_content.json' && !(await exists(draft, prof.contentName))) {
       if (fix) { await writeFile(draft, prof.contentName, JSON.stringify(content)); say('fixed', '"' + name + '": đã thêm file ' + prof.contentName + ' mà CapCut trên máy này cần để mở dự án.'); }
@@ -223,7 +228,17 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
         const txt = downgradeContent(await readText(t, rel), nv, av); if (txt) { newer++; if (fix) await writeFile(t, rel, txt); }
       }
       if (newer) say(fix ? 'fixed' : 'err', 'Dự án đích "' + t.name + '": ' + (fix ? 'đã hạ định dạng các dòng thời gian Vietlink về ' + nv + '.' : 'dòng thời gian Vietlink ghi định dạng mới hơn CapCut của dự án này (' + av + '), nên CapCut đòi cập nhật.'), !fix);
+
       else say('ok', 'Dự án đích "' + t.name + '": các dòng thời gian Vietlink ổn.');
+      /* our timelines shown in a panel of their own (split view) → move them to the main panel */
+      try {
+        const proj = JSON.parse(await readText(t, 'Timelines/project.json')), lay = await readLayout(t), ids = (note.timelines || []).map(x => x.id).filter(id => (proj.timelines || []).some(p => p.id === id));
+        const fixed = dockWith(lay, proj, ids, ids);
+        if (JSON.stringify(fixed) !== JSON.stringify(lay)) {
+          if (fix) { if (lay) await writeFile(t, 'timeline_layout.json.bak-vietlink', JSON.stringify(lay)); await writeFile(t, 'timeline_layout.json', JSON.stringify(fixed)); say('fixed', 'Dự án đích "' + t.name + '": đã đưa các dòng thời gian Vietlink về thành tab trong khung chính (hết chẻ đôi).'); }
+          else say('err', 'Dự án đích "' + t.name + '": dòng thời gian Vietlink đang mở ở khung riêng (màn hình bị chẻ đôi).', true);
+        }
+      } catch (e) {}
     }
   } catch (e) {}
   /* entries for Vietlink projects whose folder is gone */
