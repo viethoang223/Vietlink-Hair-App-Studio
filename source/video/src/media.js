@@ -302,11 +302,11 @@ async function capcutTarget(forcePick) {
 async function targetProfile(d) {
   const files = []; for await (const [n, h] of d.entries()) files.push(h.kind === 'directory' ? n + '/' : n);
   const content = files.includes('draft_content.json') ? 'draft_content.json' : files.includes('draft_info.json') ? 'draft_info.json' : null;
-  let version = '', os = '', fold = '', encrypted = false, project = null;
-  if (content) { try { const t = (await (await (await d.getFileHandle(content)).getFile()).text()).trim(); if (!t.startsWith('{')) encrypted = true; else { const j = JSON.parse(t), pl = j.last_modified_platform || j.platform || {}; version = pl.app_version || ''; os = pl.os || ''; } } catch (e) { encrypted = true; } }
+  let version = '', os = '', fold = '', encrypted = false, project = null, newVersion = '';
+  if (content) { try { const t = (await (await (await d.getFileHandle(content)).getFile()).text()).trim(); if (!t.startsWith('{')) encrypted = true; else { const j = JSON.parse(t), pl = j.last_modified_platform || j.platform || {}; version = pl.app_version || ''; os = pl.os || ''; newVersion = j.new_version || ''; } } catch (e) { encrypted = true; } }
   try { fold = JSON.parse(await (await (await d.getFileHandle('draft_meta_info.json')).getFile()).text()).draft_fold_path || ''; } catch (e) {}
   try { project = JSON.parse(await (await (await (await d.getDirectoryHandle('Timelines')).getFileHandle('project.json')).getFile()).text()); } catch (e) {}
-  return {name: d.name, files, content, version, os, fold: String(fold).replace(/\\/g, '/'), encrypted, project, timelines: !!(project && Array.isArray(project.timelines))};
+  return {name: d.name, files, content, version, newVersion, os, fold: String(fold).replace(/\\/g, '/'), encrypted, project, timelines: !!(project && Array.isArray(project.timelines))};
 }
 async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   const d = await capcutTarget(forcePick), tp = await targetProfile(d);
@@ -318,10 +318,10 @@ async function sendToCapcutTimeline(edl, clips, onProgress, forcePick) {
   /* media paths are absolute under the project folder (as CapCut writes them) */
   const fold = tp.fold && tp.fold.split('/').pop() === d.name ? tp.fold : null;
   if (!fold) throw new Error('Không đọc được đường dẫn của dự án "' + d.name + '". Mở dự án này trong CapCut một lần rồi tắt CapCut, sau đó bấm lại.');
-  const out = buildCapcutDraft(edl, media, {rootPath: fold.slice(0, fold.lastIndexOf('/')), folder: d.name, os: tp.os === 'mac' ? 'mac' : 'windows', appVersion: tp.version, waNumber: BRAND.number});
+  const out = buildCapcutDraft(edl, media, {rootPath: fold.slice(0, fold.lastIndexOf('/')), folder: d.name, os: tp.os === 'mac' ? 'mac' : 'windows', appVersion: tp.version, newVersion: tp.newVersion, waNumber: BRAND.number});
   const tl = await d.getDirectoryHandle('Timelines');
-  await writeFile(tl, out.contentId + '/draft_content.json', out.contentText);
-  await writeFile(tl, out.contentId + '/draft_info.json', out.contentText);
+  /* same content file name as the project's own timelines use */
+  await writeFile(tl, out.contentId + '/' + (tp.content || 'draft_content.json'), out.contentText);
   const now = Date.now() * 1000, project = tp.project;
   await writeFile(tl, 'project.json.bak-vietlink', JSON.stringify(project));
   project.timelines.push({create_time: now, id: out.contentId, is_marked_delete: false, name, update_time: now});
@@ -344,7 +344,7 @@ async function sendToCapcut(edl, clips, onProgress, forcePick) {
   if (prof.encrypted) throw new Error('CapCut bản ' + (prof.app_version || 'này') + ' trên máy này mã hóa file dự án, trang chưa ghi được. Bấm 🩺 Kiểm tra → 📋 Sao chép báo cáo và gửi người hỗ trợ.');
   const draft = await dir.getDirectoryHandle(folder, {create: true});
   const {media, sources} = await copyMedia(draft, '', edl, clips, onProgress);
-  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: prof.os === 'mac' ? 'mac' : 'windows', appVersion: prof.app_version, contentName: prof.contentName, timelines: prof.timelines, waNumber: BRAND.number});
+  const out = buildCapcutDraft(edl, media, {rootPath: rootPath, folder, os: prof.os === 'mac' ? 'mac' : 'windows', appVersion: prof.app_version, contentName: prof.contentName, timelines: prof.timelines, newVersion: prof.newVersion, waNumber: BRAND.number});
   for (const [rel, text] of Object.entries(out.files)) await writeFile(draft, rel, text);
   /* lets the check-and-fix tool copy a clip back if materials/ loses it */
   await writeFile(draft, 'vietlink.json', JSON.stringify({made: new Date().toISOString(), seed: edl.seed, sources}));

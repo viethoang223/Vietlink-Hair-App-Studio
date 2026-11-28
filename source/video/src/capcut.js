@@ -53,6 +53,8 @@ function buildCapcutDraft(edl, media, opts) {
   const c = ccClone(T.content);
   const contentId = ccUuid();
   Object.assign(c, {id: contentId, name: '', duration: 0, create_time: Math.floor(now / 1e6), update_time: Math.floor(now / 1e6), fps: 30.0});
+  /* claim the format of the CapCut that will open it, never newer (else it asks to update) */
+  if (opts.newVersion) c.new_version = opts.newVersion;
   c.canvas_config = {ratio: '9:16', width: W, height: H, background: null};
   for (const k of Object.keys(c.materials)) c.materials[k] = [];
   c.tracks = [];
@@ -245,9 +247,11 @@ function buildCapcutDraft(edl, media, opts) {
   for (const f of ['attachment_pc_common.json', 'draft_agency_config.json', 'performance_opt_info.json']) if (T['file:' + f]) files[f] = JSON.stringify(T['file:' + f]);
   /* the content file under the name this machine's CapCut reads (draft_info.json on the Mac app), and the Timelines
      copy only where CapCut uses Timelines */
-  /* Windows builds read draft_content.json, the Mac app draft_info.json: write both, every version finds its own */
-  files['draft_info.json'] = contentText;
-  if (opts.timelines !== false) { files['Timelines/' + contentId + '/draft_content.json'] = contentText; files['Timelines/' + contentId + '/draft_info.json'] = contentText; }
+  /* Only the content file name this machine's CapCut uses (taken from a project it made). An extra draft_info.json
+     makes CapCut 9.6 believe the project comes from a newer CapCut and ask for an update. */
+  const cname = opts.contentName === 'draft_info.json' ? 'draft_info.json' : 'draft_content.json';
+  if (cname !== 'draft_content.json') { files[cname] = contentText; delete files['draft_content.json']; }
+  if (opts.timelines !== false) files['Timelines/' + contentId + '/' + cname] = contentText;
   else { delete files['Timelines/project.json']; delete files['timeline_layout.json']; }
   const entry = Object.assign(ccClone(T.root_entry), {draft_id: draftId, draft_name: opts.folder, draft_fold_path: draftDir, draft_root_path: opts.rootPath.replace(/\//g, opts.os === 'mac' ? '/' : '\\'),
     draft_json_file: draftDir + (opts.os === 'mac' ? '/' : '\\') + (opts.contentName || 'draft_content.json'), draft_cover: '', tm_draft_create: now, tm_draft_modified: now, tm_duration: total, tm_draft_removed: 0, draft_timeline_materials_size: contentText.length});

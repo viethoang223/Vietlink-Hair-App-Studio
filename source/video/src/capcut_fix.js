@@ -20,7 +20,7 @@ const norm = p => String(p || '').replace(/\\/g, '/');
    newer builds add Timelines/, and some builds encrypt the file. Instead of guessing, look at a project CapCut itself
    made in the chosen folder and copy its layout. Only file names and a few top fields are read, never content. */
 async function capcutProfile(dir, root) {
-  const prof = {sample: '', files: [], contentName: 'draft_content.json', both: true, timelines: true, encrypted: false, app_version: '', os: /Mac/i.test(navigator.platform || navigator.userAgent) ? 'mac' : 'windows'};
+  const prof = {sample: '', files: [], contentName: 'draft_content.json', both: true, timelines: true, encrypted: false, app_version: '', newVersion: '', os: /Mac/i.test(navigator.platform || navigator.userAgent) ? 'mac' : 'windows'};
   const list = [...((root && root.all_draft_store) || [])].sort((a, b) => (b.tm_draft_modified || 0) - (a.tm_draft_modified || 0));
   for (const e of list) {
     const p = norm(e.draft_fold_path), name = p.slice(p.lastIndexOf('/') + 1);
@@ -33,13 +33,32 @@ async function capcutProfile(dir, root) {
     try {
       const head = (await readText(d, content)).trim();
       if (!head.startsWith('{')) prof.encrypted = true;
-      else { const j = JSON.parse(head), pl = j.last_modified_platform || j.platform || {}; prof.app_version = pl.app_version || ''; if (pl.os) prof.os = pl.os; }
+      else { const j = JSON.parse(head), pl = j.last_modified_platform || j.platform || {}; prof.app_version = pl.app_version || ''; prof.newVersion = j.new_version || ''; if (pl.os) prof.os = pl.os; }
     } catch (x) { prof.encrypted = true; }
     break;
   }
   return prof;
 }
-const profileText = p => p.sample ? 'Dự án mẫu do CapCut tạo: "' + p.sample + '" · file nội dung ' + p.contentName + ' · bản CapCut ' + (p.app_version || '?') + ' · ' + p.os + (p.encrypted ? ' · ĐÃ MÃ HÓA' : '') + ' · các file: ' + p.files.join(', ')
+
+/* CapCut stores the format version it wrote (new_version: 3.9 → 110.0.0, 7.3 → 146.0.0, 9.6 → 189.0.0). A project
+   claiming a newer format than the installed CapCut makes it ask for an update, so ours copy the machine's. */
+const verNum = v => String(v || '').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
+/** Rewrites a content file's version fields to the given ones when they claim something newer. Returns true if changed. */
+function downgradeContent(text, newVersion, appVersion) {
+  const j = JSON.parse(text);
+  if (!newVersion || verNum(j.new_version) <= verNum(newVersion)) return null;
+  j.new_version = newVersion;
+  for (const k of ['platform', 'last_modified_platform']) if (j[k] && appVersion) j[k].app_version = appVersion;
+  return JSON.stringify(j);
+}
+/** Every content file of a project folder: the root one(s) and each timeline's. */
+async function contentFiles(d) {
+  const out = [];
+  for (const n of ['draft_content.json', 'draft_info.json']) if (await exists(d, n)) out.push([d, n]);
+  if (await exists(d, 'Timelines', 'dir')) { const tl = await d.getDirectoryHandle('Timelines'); for (const id of await listDirs(tl)) { const t = await tl.getDirectoryHandle(id); for (const n of ['draft_content.json', 'draft_info.json']) if (await exists(t, n)) out.push([t, n]); } }
+  return out;
+}
+const profileText = p => p.sample ? 'Dự án mẫu do CapCut tạo: "' + p.sample + '" · file nội dung ' + p.contentName + ' · bản CapCut ' + (p.app_version || '?') + ' (định dạng ' + (p.newVersion || '?') + ') · ' + p.os + (p.encrypted ? ' · ĐÃ MÃ HÓA' : '') + ' · các file: ' + p.files.join(', ')
   : 'Chưa thấy dự án nào do CapCut tạo trong thư mục này (nên mở CapCut tạo 1 dự án trống rồi tắt).';
 
 
@@ -151,6 +170,19 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
       if (still.length) say('err', '"' + name + '": thiếu file ' + still.map(f => sources[f] ? f + ' (clip gốc ' + sources[f].name + ')' : f).join(', ') + ' trong thư mục materials. '
         + 'Nếu là clip: tải lại đúng clip gốc lên trang rồi bấm Tự sửa. Nếu không: xóa dự án này rồi bấm Mở trong CapCut lần nữa.');
     }
+    /* 3a'. format version no newer than this machine's CapCut, or it asks to update */
+    if (prof.newVersion) {
+      let newer = 0;
+      for (const [h, n] of await contentFiles(draft)) { const t = downgradeContent(await readText(h, n), prof.newVersion, prof.app_version); if (t) { newer++; if (fix) await writeFile(h, n, t); } }
+      if (newer) say(fix ? 'fixed' : 'err', '"' + name + '": ' + (fix ? 'đã hạ định dạng về ' + prof.newVersion + ' (CapCut ' + prof.app_version + ' trên máy này), CapCut sẽ không đòi cập nhật nữa.' : 'ghi định dạng mới hơn CapCut ' + prof.app_version + ' trên máy này, nên CapCut đòi cập nhật khi mở.'), !fix);
+    }
+    /* 3a''. a draft_info.json on a machine whose CapCut reads draft_content.json makes CapCut ask for an update */
+    if (prof.sample && prof.contentName === 'draft_content.json') {
+      const stray = [];
+      if (await exists(draft, 'draft_info.json') && await exists(draft, 'draft_content.json')) stray.push([draft, 'draft_info.json']);
+      if (await exists(draft, 'Timelines', 'dir')) { const tl = await draft.getDirectoryHandle('Timelines'); for (const id of await listDirs(tl)) { const t = await tl.getDirectoryHandle(id); if (await exists(t, 'draft_info.json') && await exists(t, 'draft_content.json')) stray.push([t, 'draft_info.json']); } }
+      if (stray.length) { if (fix) { for (const [h, n] of stray) await h.removeEntry(n); say('fixed', '"' + name + '": đã bỏ ' + stray.length + ' file draft_info.json thừa (làm CapCut đòi cập nhật).'); } else say('err', '"' + name + '": có file draft_info.json thừa nên CapCut ' + prof.app_version + ' đòi cập nhật lên bản mới hơn.', true); }
+    }
     /* 3b'. the file this machine's CapCut opens (draft_info.json on the Mac app) */
     if (prof.contentName !== 'draft_content.json' && !(await exists(draft, prof.contentName))) {
       if (fix) { await writeFile(draft, prof.contentName, JSON.stringify(content)); say('fixed', '"' + name + '": đã thêm file ' + prof.contentName + ' mà CapCut trên máy này cần để mở dự án.'); }
@@ -177,6 +209,23 @@ async function checkCapcut(dir, {fix = false, clips = [], confirmDelete = () => 
     }
     if (!out.some(r => r.text.startsWith('"' + name + '"'))) say('ok', '"' + name + '": ổn.');
   }
+  /* Vietlink timelines added to an existing project (mode 2): same format check against that project's own version */
+  try {
+    const t = await idb('readonly', st => st.get('capcutTarget'));
+    if (t && await t.queryPermission({mode: fix ? 'readwrite' : 'read'}) === 'granted' && await exists(t, 'vietlink.json')) {
+      const note = JSON.parse(await readText(t, 'vietlink.json')), main = JSON.parse(await readText(t, (await exists(t, 'draft_content.json')) ? 'draft_content.json' : 'draft_info.json'));
+      const nv = main.new_version, av = (main.last_modified_platform || main.platform || {}).app_version;
+      let newer = 0;
+      const own = (await exists(t, 'draft_content.json')) ? 'draft_content.json' : 'draft_info.json';
+      for (const tl of note.timelines || []) for (const n of ['draft_content.json', 'draft_info.json']) {
+        const rel = 'Timelines/' + tl.id + '/' + n; if (!(await exists(t, rel))) continue;
+        if (n !== own && await exists(t, 'Timelines/' + tl.id + '/' + own)) { newer++; if (fix) await (await (await t.getDirectoryHandle('Timelines')).getDirectoryHandle(tl.id)).removeEntry(n); continue; }
+        const txt = downgradeContent(await readText(t, rel), nv, av); if (txt) { newer++; if (fix) await writeFile(t, rel, txt); }
+      }
+      if (newer) say(fix ? 'fixed' : 'err', 'Dự án đích "' + t.name + '": ' + (fix ? 'đã hạ định dạng các dòng thời gian Vietlink về ' + nv + '.' : 'dòng thời gian Vietlink ghi định dạng mới hơn CapCut của dự án này (' + av + '), nên CapCut đòi cập nhật.'), !fix);
+      else say('ok', 'Dự án đích "' + t.name + '": các dòng thời gian Vietlink ổn.');
+    }
+  } catch (e) {}
   /* entries for Vietlink projects whose folder is gone */
   const gone = entries.filter(e => VL_PREFIX.test(e.draft_name || '') && norm(e.draft_fold_path).startsWith(real + '/') && !names.includes(e.draft_name));
   if (gone.length) {
